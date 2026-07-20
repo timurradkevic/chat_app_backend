@@ -1,4 +1,5 @@
-import { roomService } from '../services/room.service.js';
+import type { Role } from "../generated/prisma/enums.js";
+import { roomService } from "../services/room.service.js";
 import { prisma } from '../lib/prisma.js';
 
 export class ForbiddenError extends Error {
@@ -50,7 +51,7 @@ export async function assertIsAdminOrOwner(userId: string, roomId: string): Prom
   }
 }
 
-export async function assertHasHigherRole(actorId: string, targetId: string, roomId: string): Promise<void> {
+export async function assertHasHigherRole(actorId: string, targetId: string, roomId: string, newRole?: Role): Promise<void> {
   const targetRole = await roomService.getMemberRole(targetId, roomId);
   const actorRole = await roomService.getMemberRole(actorId, roomId);
 
@@ -63,6 +64,10 @@ export async function assertHasHigherRole(actorId: string, targetId: string, roo
   }
 
   if (targetRole === 'ADMIN' && actorRole !== 'OWNER') {
+    throw new ForbiddenError();
+  }
+
+  if (actorRole !== 'OWNER' && (newRole === 'ADMIN' || newRole === 'OWNER')) {
     throw new ForbiddenError();
   }
 }
@@ -108,6 +113,12 @@ export function assertIsRoomId(roomId: string): void {
 
 export function assertIsUserId(userId: string): void {
   if (!userId) {
+    throw new BadRequestError();
+  }
+}
+
+export function assertIsDifferentUser(userId1: string, userId2: string) {
+  if (userId1 === userId2) {
     throw new BadRequestError();
   }
 }

@@ -82,6 +82,15 @@ export const roomService = {
     return updatedRoom;
   },
 
+  async changeMemberRole(userId: string, roomId: string, role: Role) {
+    const updatedRoomMember = prisma.roomMember.update({
+      where: { userId_roomId: { userId, roomId } },
+      data: { role },
+    });
+
+    return updatedRoomMember;
+  },
+
   async checkIsUserIn(userId: string, roomId: string): Promise<boolean> {
     const isUserInRoom = await prisma.roomMember.findUnique({
       where: { userId_roomId: { userId, roomId } },
@@ -101,5 +110,16 @@ export const roomService = {
     });
 
     return updatedRoom;
+  },
+
+  async transferOwnership(roomId: string, fromUserId: string, toUserId: string) {
+    const updatedOwner = await prisma.$transaction(async (tx) => {
+      const updatedRoomOwner = await tx.roomMember.update({ where: { userId_roomId: { userId: toUserId, roomId } }, data: { role: Role.OWNER } });
+      await tx.roomMember.update({ where: { userId_roomId: { userId: fromUserId, roomId } }, data: { role: Role.ADMIN } });
+
+      return updatedRoomOwner;
+    });
+
+    return updatedOwner;
   },
 };

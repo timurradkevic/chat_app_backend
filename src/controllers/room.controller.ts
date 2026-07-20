@@ -2,7 +2,8 @@ import type { Request, Response, NextFunction } from 'express';
 import * as z from 'zod';
 import { roomService } from '../services/room.service.js';
 import { AuthUserId } from '../utils/auth.js';
-import { assertHasHigherRole, assertIsAdminOrOwner, assertIsOwner, assertIsOwnerTryingToLeave, assertIsRoom, assertIsRoomId, assertIsUser, assertIsUserId, assertIsUserInRoom, assertIsUserIsNotInRoom } from '../utils/checks.js';
+import { Role } from '../generated/prisma/enums.js';
+import { assertHasHigherRole, assertIsAdminOrOwner, assertIsDifferentUser, assertIsOwner, assertIsOwnerTryingToLeave, assertIsRoom, assertIsRoomId, assertIsUser, assertIsUserId, assertIsUserInRoom, assertIsUserIsNotInRoom } from '../utils/checks.js';
 
 const RoomData = z.object({
   name: z.string(),
@@ -15,6 +16,10 @@ const UpdatedRoomData = z.object({
 
 const AddUserBody = z.object({
   userId: z.string(),
+});
+
+const changeMemberRoleBody = z.object({
+  role: z.enum(Role),
 });
 
 export const roomController = {
@@ -163,4 +168,56 @@ export const roomController = {
 
     res.sendStatus(204);
   },
+
+  async changeMemberRole(
+    req: Request<{ roomId: string, userId: string }>,
+    res: Response,
+    next: NextFunction,
+  ) {
+    const { id } = AuthUserId.parse(req.body); // req.user
+    const { roomId, userId } = req.params;
+    const { role } = changeMemberRoleBody.parse(req.body);
+
+    assertIsRoomId(roomId);
+
+    assertIsUserId(userId);
+
+    await assertIsUser(userId);
+
+    await assertIsRoom(roomId);
+
+    await assertIsUserInRoom(userId, roomId);
+
+    await assertHasHigherRole(id, userId, roomId, role);
+
+    const updatedMember = await roomService.changeMemberRole(userId, roomId, role);
+
+    res.send(updatedMember);
+  },
+  async transferOwnership(
+    req: Request<{ roomId: string, userId: string }>,
+    res: Response,
+    next: NextFunction,
+  ) {
+    const { id } = AuthUserId.parse(req.body); // req.user
+    const { roomId, userId } = req.params;
+
+    assertIsRoomId(roomId);
+
+    assertIsUserId(userId);
+
+    await assertIsUser(userId);
+
+    await assertIsRoom(roomId);
+
+    await assertIsUserInRoom(userId, roomId);
+
+    await assertIsOwner(id, roomId);
+
+    assertIsDifferentUser(id, userId);
+
+    const updatedMember = await roomService.transferOwnership(roomId, id, userId);
+
+    res.send(updatedMember);
+  }
 };

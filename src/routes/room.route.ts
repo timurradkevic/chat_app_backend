@@ -18,3 +18,13 @@ roomRouter.delete(
 );
 
 roomRouter.delete('/:roomId/leave', catchError(roomController.leave));
+
+roomRouter.patch(
+  '/:roomId/members/:userId/role',
+  catchError(roomController.changeMemberRole),
+);
+
+roomRouter.patch(
+  '/:roomId/members/:userId/transfer-ownership',
+  catchError(roomController.transferOwnership),
+);
