@@ -1,4 +1,5 @@
 import type { Role } from "../generated/prisma/enums.js";
+import { messageService } from "../services/message.service.js";
 import { roomService } from "../services/room.service.js";
 import { prisma } from '../lib/prisma.js';
 
@@ -51,6 +52,12 @@ export async function assertIsAdminOrOwner(userId: string, roomId: string): Prom
   }
 }
 
+export function assertIsAuthor(userId: string, authorId: string) {
+  if (userId !== authorId) {
+    throw new ForbiddenError();
+  }
+}
+
 export async function assertHasHigherRole(actorId: string, targetId: string, roomId: string, newRole?: Role): Promise<void> {
   const targetRole = await roomService.getMemberRole(targetId, roomId);
   const actorRole = await roomService.getMemberRole(actorId, roomId);
@@ -95,6 +102,15 @@ export async function assertIsRoom(roomId: string) {
   return room;
 }
 
+export async function assertIsMessage(messageId: string) {
+  const message = await messageService.getOneById(messageId);
+  if (!message) {
+    throw new NotFoundError();
+  }
+
+  return message;
+}
+
 // TODO: replace with a proper userService.getOne() once the user feature lands
 export async function assertIsUser(userId: string) {
   const user = await prisma.user.findUnique({ where: { id: userId } });
@@ -113,6 +129,12 @@ export function assertIsRoomId(roomId: string): void {
 
 export function assertIsUserId(userId: string): void {
   if (!userId) {
+    throw new BadRequestError();
+  }
+}
+
+export function assertIsMessageId(messageId: string): void {
+  if (!messageId) {
     throw new BadRequestError();
   }
 }
