@@ -8,3 +8,4 @@ userRouter.post('/register', catchError(userController.register));
 userRouter.get('/me', catchError(userController.getMe));
 userRouter.patch('/me', catchError(userController.update));
 userRouter.patch('/me/password', catchError(userController.updatePassword));
+userRouter.delete('/me', catchError(userController.delete));

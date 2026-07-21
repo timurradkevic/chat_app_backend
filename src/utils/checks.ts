@@ -143,6 +143,13 @@ export async function assertIsCorrectPassword(userId: string, plainPassword: str
   }
 }
 
+export async function assertHasNoOwnedRooms(userId: string) {
+  const hasOwnedRoom = await roomService.hasOwnedRoom(userId);
+  if (hasOwnedRoom) {
+    throw new ConflictError();
+  }
+}
+
 export function assertIsRoomId(roomId: string): void {
   if (!roomId) {
     throw new BadRequestError();

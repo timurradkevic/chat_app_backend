@@ -43,6 +43,10 @@ export const userService = {
     });
   },
 
+  async delete(userId: string) {
+    await prisma.user.delete({ where: { id: userId } });
+  },
+
   async verifyPassword(userId: string, plainPassword: string) {
     const user = await prisma.user.findUnique({ where: { id: userId } });
 

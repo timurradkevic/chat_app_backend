@@ -40,6 +40,12 @@ export const roomService = {
     return roomMember?.role || null;
   },
 
+  async hasOwnedRoom(userId: string) {
+    const rooms = await prisma.room.findFirst({ where: { ownerId: userId } });
+
+    return !!rooms;
+  },
+
   async create(roomData: RoomData) {
     const room = await prisma.$transaction(async (tx) => {
       const newRoom = await tx.room.create({ data: roomData });

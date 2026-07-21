@@ -1,7 +1,7 @@
 import type { Request, Response, NextFunction } from 'express';
 import * as z from 'zod';
 import { userService } from '../services/user.service.js';
-import { assertIsCorrectPassword, assertIsUniqueEmail, assertIsUser } from '../utils/checks.js';
+import { assertHasNoOwnedRooms, assertIsCorrectPassword, assertIsUniqueEmail, assertIsUser } from '../utils/checks.js';
 import { AuthUserId } from '../utils/auth.js';
 import type { User } from '../generated/prisma/client.js';
 
@@ -76,6 +76,18 @@ export const userController = {
 
     await assertIsCorrectPassword(id, verifiedData.currentPassword);
     await userService.updatePassword(id, verifiedData.newPassword);
+
+    res.sendStatus(204);
+  },
+
+  async delete(req: Request, res: Response, next: NextFunction) {
+    const { id } = AuthUserId.parse(req.body);
+
+    await assertIsUser(id);
+
+    await assertHasNoOwnedRooms(id);
+
+    await userService.delete(id);
 
     res.sendStatus(204);
   },
