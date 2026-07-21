@@ -2,6 +2,7 @@ import type { Role } from "../generated/prisma/enums.js";
 import { messageService } from "../services/message.service.js";
 import { roomService } from "../services/room.service.js";
 import { prisma } from '../lib/prisma.js';
+import { userService } from "../services/user.service.js";
 
 export class ForbiddenError extends Error {
   constructor(message = 'Forbidden') {
@@ -111,11 +112,19 @@ export async function assertIsMessage(messageId: string) {
   return message;
 }
 
-// TODO: replace with a proper userService.getOne() once the user feature lands
 export async function assertIsUser(userId: string) {
-  const user = await prisma.user.findUnique({ where: { id: userId } });
+  const user = await userService.getOneById(userId);
   if (!user) {
     throw new NotFoundError();
+  }
+
+  return user;
+}
+
+export async function assertIsUniqueEmail(email: string) {
+  const user = await userService.getOneByEmail(email);
+  if (user) {
+    throw new ConflictError();
   }
 
   return user;
