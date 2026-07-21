@@ -31,6 +31,12 @@ export class NotFoundError extends Error {
     this.name = 'NotFound';
   }
 }
+export class UnauthorizedError extends Error {
+  constructor(message = 'Unauthorized') {
+    super(message);
+    this.name = 'Unauthorized';
+  }
+}
 
 export async function assertIsOwner(userId: string, roomId: string): Promise<void> {
   const role = await roomService.getMemberRole(userId, roomId);
@@ -128,6 +134,13 @@ export async function assertIsUniqueEmail(email: string) {
   }
 
   return user;
+}
+
+export async function assertIsCorrectPassword(userId: string, plainPassword: string) {
+  const isValid = await userService.verifyPassword(userId, plainPassword);
+  if (!isValid) {
+    throw new UnauthorizedError();
+  }
 }
 
 export function assertIsRoomId(roomId: string): void {

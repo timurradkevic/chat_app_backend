@@ -1,7 +1,7 @@
 import type { Request, Response, NextFunction } from 'express';
 import * as z from 'zod';
 import { userService } from '../services/user.service.js';
-import { assertIsUniqueEmail, assertIsUser } from '../utils/checks.js';
+import { assertIsCorrectPassword, assertIsUniqueEmail, assertIsUser } from '../utils/checks.js';
 import { AuthUserId } from '../utils/auth.js';
 import type { User } from '../generated/prisma/client.js';
 
@@ -28,7 +28,12 @@ const RegisterData = z.object({
 const UpdatedUserData = z.object({
   name: z.string(),
   email: z.email(),
-})
+});
+
+const PasswordData = z.object({
+  currentPassword: PasswordSchema,
+  newPassword: PasswordSchema,
+});
 
 export const userController = {
   async register(req: Request, res: Response, next: NextFunction) {
@@ -60,5 +65,18 @@ export const userController = {
     const user = await userService.update(id, verifiedData);
 
     res.status(200).send(stabilizeUser(user));
+  },
+
+  async updatePassword(req: Request, res: Response, next: NextFunction) {
+    const { id } = AuthUserId.parse(req.body);
+    const { passwordData } = req.body;
+    const verifiedData = PasswordData.parse(passwordData);
+
+    await assertIsUser(id);
+
+    await assertIsCorrectPassword(id, verifiedData.currentPassword);
+    await userService.updatePassword(id, verifiedData.newPassword);
+
+    res.sendStatus(204);
   },
 };

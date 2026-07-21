@@ -33,4 +33,21 @@ export const userService = {
 
     return updatedUser;
   },
+
+  async updatePassword(userId: string, newPassword: string) {
+    const hashPass = await bcrypt.hash(newPassword, 10);
+
+    await prisma.user.update({
+      where: { id: userId },
+      data: { password: hashPass },
+    });
+  },
+
+  async verifyPassword(userId: string, plainPassword: string) {
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+
+    const isValidPassword = await bcrypt.compare(plainPassword, user?.password ?? '')
+
+    return isValidPassword;
+  },
 };

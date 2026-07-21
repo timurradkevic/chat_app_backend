@@ -2,7 +2,7 @@ import type { NextFunction, Request, RequestHandler, Response } from 'express';
 import type { ParamsDictionary } from 'express-serve-static-core';
 import type { ParsedQs } from 'qs';
 import * as z from 'zod';
-import { ForbiddenError, BadRequestError, NotFoundError } from './checks.js';
+import { ForbiddenError, BadRequestError, NotFoundError, UnauthorizedError, ConflictError } from './checks.js';
 
 export const catchError =
   <P = ParamsDictionary, ResBody = any, ReqBody = any, ReqQuery = ParsedQs>(
@@ -28,6 +28,14 @@ export const catchError =
       }
       if (err instanceof NotFoundError) {
         (res as Response).status(404).json({ message: err.message });
+        return;
+      }
+      if (err instanceof UnauthorizedError) {
+        (res as Response).status(401).json({ message: err.message });
+        return;
+      }
+      if (err instanceof ConflictError) {
+        (res as Response).status(409).json({ message: err.message });
         return;
       }
       next(err);
