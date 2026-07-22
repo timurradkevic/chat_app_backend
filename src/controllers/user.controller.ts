@@ -5,6 +5,8 @@ import { assertHasNoOwnedRooms, assertIsCorrectEmailAndPassword, assertIsCorrect
 import { AuthUserId } from '../utils/auth.js';
 import type { User } from '../generated/prisma/client.js';
 import { jwtService } from '../utils/jwt.js';
+import { tokenService } from '../services/token.service.js';
+import { mailer } from '../utils/email.js';
 
 const stabilizeUser = (user: User) => {
   const { password, ...userWithoutPass } = user;
@@ -50,6 +52,9 @@ export const userController = {
     await assertIsUniqueEmail(verifiedData.email);
 
     const user = await userService.create(verifiedData);
+    const rawToken = await tokenService.create({ userId: user.id, type: 'ACTIVATION' });
+
+    await mailer.sendActivationEmail(user.email, rawToken);
 
     res.status(201).send(stabilizeUser(user));
   },

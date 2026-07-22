@@ -19,7 +19,7 @@ export const userService = {
   },
 
   async create(userData: UserData) {
-    const hashPass = await bcrypt.hash(userData.password, 10);
+    const hashPass = await bcrypt.hash(userData.password ?? '', 10);
     const user = await prisma.user.create({ data: { email: userData.email, name: userData.name, password: hashPass } });
 
     return user;
@@ -48,7 +48,7 @@ export const userService = {
   },
 
   async verifyPassword(user: User, plainPassword: string) {
-    const isValidPassword = await bcrypt.compare(plainPassword, user.password)
+    const isValidPassword = await bcrypt.compare(plainPassword, user?.password ?? '');
 
     return isValidPassword;
   },
