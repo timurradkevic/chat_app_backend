@@ -47,10 +47,8 @@ export const userService = {
     await prisma.user.delete({ where: { id: userId } });
   },
 
-  async verifyPassword(userId: string, plainPassword: string) {
-    const user = await prisma.user.findUnique({ where: { id: userId } });
-
-    const isValidPassword = await bcrypt.compare(plainPassword, user?.password ?? '')
+  async verifyPassword(user: User, plainPassword: string) {
+    const isValidPassword = await bcrypt.compare(plainPassword, user.password)
 
     return isValidPassword;
   },

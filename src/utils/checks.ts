@@ -1,8 +1,8 @@
 import type { Role } from "../generated/prisma/enums.js";
 import { messageService } from "../services/message.service.js";
 import { roomService } from "../services/room.service.js";
-import { prisma } from '../lib/prisma.js';
 import { userService } from "../services/user.service.js";
+import type { User } from "../generated/prisma/client.js";
 
 export class ForbiddenError extends Error {
   constructor(message = 'Forbidden') {
@@ -136,11 +136,25 @@ export async function assertIsUniqueEmail(email: string) {
   return user;
 }
 
-export async function assertIsCorrectPassword(userId: string, plainPassword: string) {
-  const isValid = await userService.verifyPassword(userId, plainPassword);
+export async function assertIsCorrectPassword(user: User, plainPassword: string) {
+  const isValid = await userService.verifyPassword(user, plainPassword);
   if (!isValid) {
     throw new UnauthorizedError();
   }
+}
+
+export async function assertIsCorrectEmailAndPassword(userEmail: string, plainPassword: string) {
+  const user = await userService.getOneByEmail(userEmail);
+  if (!user) {
+    throw new UnauthorizedError;
+  }
+
+  const isValidPassword = await userService.verifyPassword(user, plainPassword);
+  if (!isValidPassword) {
+    throw new UnauthorizedError();
+  }
+
+  return user;
 }
 
 export async function assertHasNoOwnedRooms(userId: string) {

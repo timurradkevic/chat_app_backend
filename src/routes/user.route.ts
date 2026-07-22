@@ -9,3 +9,4 @@ userRouter.get('/me', catchError(userController.getMe));
 userRouter.patch('/me', catchError(userController.update));
 userRouter.patch('/me/password', catchError(userController.updatePassword));
 userRouter.delete('/me', catchError(userController.delete));
+userRouter.post('/login', catchError(userController.login));

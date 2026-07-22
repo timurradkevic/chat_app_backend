@@ -1,9 +1,10 @@
 import type { Request, Response, NextFunction } from 'express';
 import * as z from 'zod';
 import { userService } from '../services/user.service.js';
-import { assertHasNoOwnedRooms, assertIsCorrectPassword, assertIsUniqueEmail, assertIsUser } from '../utils/checks.js';
+import { assertHasNoOwnedRooms, assertIsCorrectEmailAndPassword, assertIsCorrectPassword, assertIsUniqueEmail, assertIsUser } from '../utils/checks.js';
 import { AuthUserId } from '../utils/auth.js';
 import type { User } from '../generated/prisma/client.js';
+import { jwtService } from '../utils/jwt.js';
 
 const stabilizeUser = (user: User) => {
   const { password, ...userWithoutPass } = user;
@@ -34,6 +35,12 @@ const PasswordData = z.object({
   currentPassword: PasswordSchema,
   newPassword: PasswordSchema,
 });
+
+const LoginData = z.object({
+  email: z.email(),
+  password: z.string(),
+});
+
 
 export const userController = {
   async register(req: Request, res: Response, next: NextFunction) {
@@ -72,9 +79,9 @@ export const userController = {
     const { passwordData } = req.body;
     const verifiedData = PasswordData.parse(passwordData);
 
-    await assertIsUser(id);
+    const user = await assertIsUser(id);
 
-    await assertIsCorrectPassword(id, verifiedData.currentPassword);
+    await assertIsCorrectPassword(user, verifiedData.currentPassword);
     await userService.updatePassword(id, verifiedData.newPassword);
 
     res.sendStatus(204);
@@ -90,5 +97,16 @@ export const userController = {
     await userService.delete(id);
 
     res.sendStatus(204);
+  },
+
+  async login(req: Request, res: Response, next: NextFunction) {
+    const { loginData } = req.body;
+    const verifiedData = LoginData.parse(loginData);
+
+    const user = await assertIsCorrectEmailAndPassword(verifiedData.email, verifiedData.password);
+
+    const token = jwtService.sign({ userId: user.id });
+
+    res.status(200).send({ token });
   },
 };
