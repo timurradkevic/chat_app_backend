@@ -1,8 +1,9 @@
-import type { Role } from "../generated/prisma/enums.js";
+import type { Role, TokenTypes } from "../generated/prisma/enums.js";
 import { messageService } from "../services/message.service.js";
 import { roomService } from "../services/room.service.js";
 import { userService } from "../services/user.service.js";
 import type { User } from "../generated/prisma/client.js";
+import { tokenService } from "../services/token.service.js";
 
 export class ForbiddenError extends Error {
   constructor(message = 'Forbidden') {
@@ -21,20 +22,27 @@ export class ConflictError extends Error {
 export class BadRequestError extends Error {
   constructor(message = 'Bad Request') {
     super(message);
-    this.name = 'BadRequest';
+    this.name = 'BadRequestError';
   }
 }
 
 export class NotFoundError extends Error {
   constructor(message = 'Not Found') {
     super(message);
-    this.name = 'NotFound';
+    this.name = 'NotFoundError';
   }
 }
 export class UnauthorizedError extends Error {
   constructor(message = 'Unauthorized') {
     super(message);
-    this.name = 'Unauthorized';
+    this.name = 'UnauthorizedError';
+  }
+}
+
+export class GoneError extends Error {
+  constructor(message = 'Gone') {
+    super(message);
+    this.name = 'GoneError';
   }
 }
 
@@ -155,6 +163,17 @@ export async function assertIsCorrectEmailAndPassword(userEmail: string, plainPa
   }
 
   return user;
+}
+
+export async function assertIsValidToken(rawToken: string, type: TokenTypes) {
+  const token = await tokenService.verify(rawToken, type);
+  if (token === 'expired') {
+    throw new GoneError();
+  }
+  if (!token) {
+    throw new UnauthorizedError();
+  }
+  return token;
 }
 
 export async function assertHasNoOwnedRooms(userId: string) {

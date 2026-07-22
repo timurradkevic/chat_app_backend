@@ -52,4 +52,15 @@ export const userService = {
 
     return isValidPassword;
   },
+
+  async confirmEmail(userId: string, tokenId: string) {
+    await prisma.$transaction(async (tx) => {
+      await tx.user.update({
+        where: { id: userId },
+        data: { confirmedEmail: true },
+      });
+
+      await tx.token.delete({ where: { id: tokenId } });
+    });
+  },
 };

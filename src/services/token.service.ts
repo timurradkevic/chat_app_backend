@@ -19,4 +19,18 @@ export const tokenService = {
 
     return rawToken;
   },
+
+  async verify(rawToken: string, type: TokenTypes) {
+    const tokenHash = createHash('sha256').update(rawToken).digest('hex');
+    const token = await prisma.token.findUnique({ where: { tokenHash } });
+
+    if (!token || token.type !== type) {
+      return null;
+    }
+    if (token.expiredTime < new Date()) {
+      return 'expired' as const;
+    }
+
+    return token;
+  },
 };

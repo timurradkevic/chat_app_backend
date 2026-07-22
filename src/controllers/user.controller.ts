@@ -1,7 +1,7 @@
 import type { Request, Response, NextFunction } from 'express';
 import * as z from 'zod';
 import { userService } from '../services/user.service.js';
-import { assertHasNoOwnedRooms, assertIsCorrectEmailAndPassword, assertIsCorrectPassword, assertIsUniqueEmail, assertIsUser } from '../utils/checks.js';
+import { assertHasNoOwnedRooms, assertIsCorrectEmailAndPassword, assertIsCorrectPassword, assertIsUniqueEmail, assertIsUser, assertIsValidToken } from '../utils/checks.js';
 import { AuthUserId } from '../utils/auth.js';
 import type { User } from '../generated/prisma/client.js';
 import { jwtService } from '../utils/jwt.js';
@@ -113,5 +113,14 @@ export const userController = {
     const token = jwtService.sign({ userId: user.id });
 
     res.status(200).send({ token });
+  },
+
+  async activate(req: Request<{ activationToken: string }>, res: Response, next: NextFunction) {
+    const { activationToken } = req.params;
+    const tokenRecord = await assertIsValidToken(activationToken, 'ACTIVATION');
+
+    await userService.confirmEmail(tokenRecord.userId, tokenRecord.id);
+
+    res.sendStatus(204);
   },
 };
