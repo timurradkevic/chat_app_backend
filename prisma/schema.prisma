@@ -16,10 +16,24 @@ model User {
   id String @id @default(cuid())
   email String @unique
   name String
-  password String
+  password String?
+  confirmedEmail Boolean @default(false)
+  googleId String? @unique
+  tokens Token[]
   messages Message[]
   ownedRooms Room[]
   memberships RoomMember[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Token {
+  id String @id @default(cuid())
+  tokenHash String @unique
+  userId String
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiredTime DateTime
+  type TokenTypes
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
@@ -66,4 +80,9 @@ enum Role {
   OWNER
   ADMIN
   MEMBER
+}
+
+enum TokenTypes {
+  ACTIVATION
+  RESET
 }
