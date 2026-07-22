@@ -165,6 +165,12 @@ export async function assertIsCorrectEmailAndPassword(userEmail: string, plainPa
   return user;
 }
 
+export function assertIsConfirmedEmail(user: User) {
+  if (!user.confirmedEmail) {
+    throw new ForbiddenError();
+  }
+}
+
 export async function assertIsValidToken(rawToken: string, type: TokenTypes) {
   const token = await tokenService.verify(rawToken, type);
   if (token === 'expired') {

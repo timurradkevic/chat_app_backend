@@ -1,7 +1,7 @@
 import type { Request, Response, NextFunction } from 'express';
 import * as z from 'zod';
 import { userService } from '../services/user.service.js';
-import { assertHasNoOwnedRooms, assertIsCorrectEmailAndPassword, assertIsCorrectPassword, assertIsUniqueEmail, assertIsUser, assertIsValidToken } from '../utils/checks.js';
+import { assertHasNoOwnedRooms, assertIsCorrectEmailAndPassword, assertIsCorrectPassword, assertIsUniqueEmail, assertIsUser, assertIsValidToken, assertIsConfirmedEmail } from '../utils/checks.js';
 import { AuthUserId } from '../utils/auth.js';
 import type { User } from '../generated/prisma/client.js';
 import { jwtService } from '../utils/jwt.js';
@@ -109,6 +109,8 @@ export const userController = {
     const verifiedData = LoginData.parse(loginData);
 
     const user = await assertIsCorrectEmailAndPassword(verifiedData.email, verifiedData.password);
+
+    assertIsConfirmedEmail(user);
 
     const token = jwtService.sign({ userId: user.id });
 
