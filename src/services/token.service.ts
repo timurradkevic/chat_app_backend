@@ -33,4 +33,14 @@ export const tokenService = {
 
     return token;
   },
+
+  async reissue(tokenData: TokenData) {
+    const expiredTime = new Date(Date.now() + EXPIRATION_MS[tokenData.type]);
+    const rawToken = randomBytes(32).toString('hex');
+    const tokenHash = createHash('sha256').update(rawToken).digest('hex');
+
+    await prisma.token.upsert({ where: { userId_type: { type: tokenData.type, userId: tokenData.userId } }, update: { tokenHash, expiredTime }, create: { ...tokenData, tokenHash, expiredTime } });
+
+    return rawToken;
+  }
 };

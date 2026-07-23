@@ -43,6 +43,10 @@ const LoginData = z.object({
   password: z.string(),
 });
 
+const ResendActivationData = z.object({
+  email: z.email(),
+});
+
 
 export const userController = {
   async register(req: Request, res: Response, next: NextFunction) {
@@ -122,6 +126,21 @@ export const userController = {
     const tokenRecord = await assertIsValidToken(activationToken, 'ACTIVATION');
 
     await userService.confirmEmail(tokenRecord.userId, tokenRecord.id);
+
+    res.sendStatus(204);
+  },
+
+  async resendActivation(req: Request, res: Response, next: NextFunction) {
+    const { resendActivationData } = req.body;
+    const verifiedData = ResendActivationData.parse(resendActivationData);
+
+    const user = await userService.getOneByEmail(verifiedData.email);
+
+    if (user && user.confirmedEmail === false) {
+      const rawToken = await tokenService.reissue({type: 'ACTIVATION', userId: user.id });
+
+      mailer.sendActivationEmail(user.email, rawToken);
+    }
 
     res.sendStatus(204);
   },
