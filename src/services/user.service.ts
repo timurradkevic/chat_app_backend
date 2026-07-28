@@ -2,7 +2,8 @@ import type { User } from '../generated/prisma/client.js';
 import { prisma } from '../lib/prisma.js';
 import bcrypt from 'bcrypt';
 
-type UserData = Pick<User, 'name' | 'email' | 'password'>;
+type UserData = Pick<User, 'name' | 'email' | 'password' >;
+type UserGoogleData = Pick<User, 'name' | 'email' | 'googleId' >;
 type UpdatedUserData = Pick<User, 'name' | 'email'>;
 
 export const userService = {
@@ -18,9 +19,21 @@ export const userService = {
     return user;
   },
 
+  async getOneByGoogleId(userGoogleId: string) {
+    const user = await prisma.user.findUnique({ where: { googleId: userGoogleId } });
+
+    return user;
+  },
+
   async create(userData: UserData) {
-    const hashPass = await bcrypt.hash(userData.password ?? '', 10);
+    const hashPass = userData.password ? await bcrypt.hash(userData.password, 10) : null;
     const user = await prisma.user.create({ data: { email: userData.email, name: userData.name, password: hashPass } });
+
+    return user;
+  },
+
+  async createFromGoogle(userGoogleData: UserGoogleData) {
+    const user = await prisma.user.create({ data: { email: userGoogleData.email, name: userGoogleData.name, password: null, googleId: userGoogleData.googleId, confirmedEmail: true } });
 
     return user;
   },
@@ -40,6 +53,17 @@ export const userService = {
     await prisma.user.update({
       where: { id: userId },
       data: { password: hashPass },
+    });
+  },
+
+  async linkGoogleId(userId: string, googleId: string) {
+    await prisma.$transaction(async (tx) => {
+      await tx.user.update({
+        where: { id: userId },
+        data: { confirmedEmail: true, googleId },
+      });
+
+      await tx.token.deleteMany({ where: { userId, type: 'ACTIVATION' } });
     });
   },
 

@@ -1,7 +1,7 @@
 import type { Request, Response, NextFunction } from 'express';
 import * as z from 'zod';
 import { userService } from '../services/user.service.js';
-import { assertHasNoOwnedRooms, assertIsCorrectEmailAndPassword, assertIsCorrectPassword, assertIsUniqueEmail, assertIsUser, assertIsValidToken, assertIsConfirmedEmail } from '../utils/checks.js';
+import { assertHasNoOwnedRooms, assertIsCorrectEmailAndPassword, assertIsCorrectPassword, assertIsUniqueEmail, assertIsUser, assertIsValidToken, assertIsConfirmedEmail, assertIsValidGoogleToken, assertIsEmailVerified } from '../utils/checks.js';
 import { AuthUserId } from '../utils/auth.js';
 import type { User } from '../generated/prisma/client.js';
 import { jwtService } from '../utils/jwt.js';
@@ -41,6 +41,17 @@ const PasswordData = z.object({
 const LoginData = z.object({
   email: z.email(),
   password: z.string(),
+});
+
+const GoogleLoginData = z.object({
+  idToken: z.string(),
+});
+
+const GoogleTokenData = z.object({
+  email: z.email(),
+  sub: z.string(),
+  name: z.string(),
+  email_verified: z.boolean(),
 });
 
 const ResendActivationData = z.object({
@@ -119,6 +130,43 @@ export const userController = {
     const token = jwtService.sign({ userId: user.id });
 
     res.status(200).send({ token });
+  },
+
+  async loginWithGoogle(req: Request, res: Response, next: NextFunction) {
+    const { googleLoginData } = req.body;
+    const verifiedData = GoogleLoginData.parse(googleLoginData);
+
+    const googleTokenData = await assertIsValidGoogleToken(verifiedData.idToken);
+
+    const { email, sub, name, email_verified } = GoogleTokenData.parse(googleTokenData);
+
+    assertIsEmailVerified(email_verified);
+
+    const userByGoogleId = await userService.getOneByGoogleId(sub);
+
+    if (userByGoogleId) {
+      const token = jwtService.sign({ userId: userByGoogleId.id });
+
+      res.status(200).send({ token });
+    } else {
+      const userByEmail = await userService.getOneByEmail(email);
+
+      if (userByEmail) {
+        // Auto-linking Google account by verified email — Google's email_verified already proves ownership, so this is safe
+        await userService.linkGoogleId(userByEmail.id, sub);
+
+        const token = jwtService.sign({ userId: userByEmail.id });
+
+        res.status(200).send({ token });
+      } else {
+        const userData = { name, email, googleId: sub };
+        const createdUser = await userService.createFromGoogle(userData);
+
+        const token = jwtService.sign({ userId: createdUser.id });
+
+        res.status(200).send({ token });
+      }
+    }
   },
 
   async activate(req: Request<{ activationToken: string }>, res: Response, next: NextFunction) {

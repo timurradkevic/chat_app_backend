@@ -4,6 +4,7 @@ import { roomService } from "../services/room.service.js";
 import { userService } from "../services/user.service.js";
 import type { User } from "../generated/prisma/client.js";
 import { tokenService } from "../services/token.service.js";
+import { googleService } from "./google.js";
 
 export class ForbiddenError extends Error {
   constructor(message = 'Forbidden') {
@@ -179,6 +180,16 @@ export async function assertIsValidToken(rawToken: string, type: TokenTypes) {
   if (!token) {
     throw new UnauthorizedError();
   }
+
+  return token;
+}
+
+export async function assertIsValidGoogleToken(googleToken: string) {
+  const token = await googleService.verify(googleToken);
+  if (!token) {
+    throw new UnauthorizedError();
+  }
+
   return token;
 }
 
@@ -210,5 +221,11 @@ export function assertIsMessageId(messageId: string): void {
 export function assertIsDifferentUser(userId1: string, userId2: string) {
   if (userId1 === userId2) {
     throw new BadRequestError();
+  }
+}
+
+export function assertIsEmailVerified(email_verified: boolean) {
+  if (!email_verified) {
+    throw new UnauthorizedError();
   }
 }
