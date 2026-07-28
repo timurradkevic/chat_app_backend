@@ -50,27 +50,27 @@ export class GoneError extends Error {
 export async function assertIsOwner(userId: string, roomId: string): Promise<void> {
   const role = await roomService.getMemberRole(userId, roomId);
   if (role !== 'OWNER') {
-    throw new ForbiddenError();
+    throw new ForbiddenError('Only the room owner can perform this action');
   }
 }
 
 export async function assertIsOwnerTryingToLeave(userId: string, roomId: string): Promise<void> {
   const role = await roomService.getMemberRole(userId, roomId);
   if (role === 'OWNER') {
-    throw new ConflictError();
+    throw new ConflictError('Owner cannot leave the room, transfer ownership first');
   }
 }
 
 export async function assertIsAdminOrOwner(userId: string, roomId: string): Promise<void> {
   const role = await roomService.getMemberRole(userId, roomId);
   if (role !== 'ADMIN' && role !== 'OWNER') {
-    throw new ForbiddenError();
+    throw new ForbiddenError('Only room admins or the owner can perform this action');
   }
 }
 
 export function assertIsAuthor(userId: string, authorId: string) {
   if (userId !== authorId) {
-    throw new ForbiddenError();
+    throw new ForbiddenError('Only the author can perform this action');
   }
 }
 
@@ -79,40 +79,40 @@ export async function assertHasHigherRole(actorId: string, targetId: string, roo
   const actorRole = await roomService.getMemberRole(actorId, roomId);
 
   if (actorRole !== 'ADMIN' && actorRole !== 'OWNER') {
-    throw new ForbiddenError();
+    throw new ForbiddenError('Only admins or the owner can change member roles');
   }
 
   if (targetRole === 'OWNER') {
-    throw new ForbiddenError();
+    throw new ForbiddenError('Cannot change the role of the room owner');
   }
 
   if (targetRole === 'ADMIN' && actorRole !== 'OWNER') {
-    throw new ForbiddenError();
+    throw new ForbiddenError('Only the owner can change an admin\'s role');
   }
 
   if (actorRole !== 'OWNER' && (newRole === 'ADMIN' || newRole === 'OWNER')) {
-    throw new ForbiddenError();
+    throw new ForbiddenError('Only the owner can assign the admin or owner role');
   }
 }
 
 export async function assertIsUserInRoom(userId: string, roomId: string): Promise<void> {
   const isUserInRoom = await roomService.checkIsUserIn(userId, roomId);
   if (!isUserInRoom) {
-    throw new ForbiddenError();
+    throw new ForbiddenError('User is not a member of this room');
   }
 }
 
 export async function assertIsUserIsNotInRoom(userId: string, roomId: string): Promise<void> {
   const isUserInRoom = await roomService.checkIsUserIn(userId, roomId);
   if (isUserInRoom) {
-    throw new ForbiddenError();
+    throw new ForbiddenError('User is already a member of this room');
   }
 }
 
 export async function assertIsRoom(roomId: string) {
   const room = await roomService.getOneById(roomId);
   if (!room) {
-    throw new NotFoundError();
+    throw new NotFoundError('Room not found');
   }
 
   return room;
@@ -121,7 +121,7 @@ export async function assertIsRoom(roomId: string) {
 export async function assertIsMessage(messageId: string) {
   const message = await messageService.getOneById(messageId);
   if (!message) {
-    throw new NotFoundError();
+    throw new NotFoundError('Message not found');
   }
 
   return message;
@@ -130,7 +130,7 @@ export async function assertIsMessage(messageId: string) {
 export async function assertIsUser(userId: string) {
   const user = await userService.getOneById(userId);
   if (!user) {
-    throw new NotFoundError();
+    throw new NotFoundError('User not found');
   }
 
   return user;
@@ -139,7 +139,7 @@ export async function assertIsUser(userId: string) {
 export async function assertIsUniqueEmail(email: string) {
   const user = await userService.getOneByEmail(email);
   if (user) {
-    throw new ConflictError();
+    throw new ConflictError('This email is already in use');
   }
 
   return user;
@@ -148,19 +148,22 @@ export async function assertIsUniqueEmail(email: string) {
 export async function assertIsCorrectPassword(user: User, plainPassword: string) {
   const isValid = await userService.verifyPassword(user, plainPassword);
   if (!isValid) {
-    throw new UnauthorizedError();
+    throw new UnauthorizedError('Incorrect password');
   }
 }
 
 export async function assertIsCorrectEmailAndPassword(userEmail: string, plainPassword: string) {
+  // Note: both branches intentionally share the same message.
+  // Returning "user not found" vs "wrong password" separately would let an
+  // attacker enumerate which emails are registered, so we keep it generic here.
   const user = await userService.getOneByEmail(userEmail);
   if (!user) {
-    throw new UnauthorizedError;
+    throw new UnauthorizedError('Invalid email or password');
   }
 
   const isValidPassword = await userService.verifyPassword(user, plainPassword);
   if (!isValidPassword) {
-    throw new UnauthorizedError();
+    throw new UnauthorizedError('Invalid email or password');
   }
 
   return user;
@@ -168,17 +171,17 @@ export async function assertIsCorrectEmailAndPassword(userEmail: string, plainPa
 
 export function assertIsConfirmedEmail(user: User) {
   if (!user.confirmedEmail) {
-    throw new ForbiddenError();
+    throw new ForbiddenError('Email address is not confirmed yet');
   }
 }
 
 export async function assertIsValidToken(rawToken: string, type: TokenTypes) {
   const token = await tokenService.verify(rawToken, type);
   if (token === 'expired') {
-    throw new GoneError();
+    throw new GoneError('Token has expired');
   }
   if (!token) {
-    throw new UnauthorizedError();
+    throw new UnauthorizedError('Invalid token');
   }
 
   return token;
@@ -187,7 +190,7 @@ export async function assertIsValidToken(rawToken: string, type: TokenTypes) {
 export async function assertIsValidGoogleToken(googleToken: string) {
   const token = await googleService.verify(googleToken);
   if (!token) {
-    throw new UnauthorizedError();
+    throw new UnauthorizedError('Invalid Google token');
   }
 
   return token;
@@ -196,36 +199,36 @@ export async function assertIsValidGoogleToken(googleToken: string) {
 export async function assertHasNoOwnedRooms(userId: string) {
   const hasOwnedRoom = await roomService.hasOwnedRoom(userId);
   if (hasOwnedRoom) {
-    throw new ConflictError();
+    throw new ConflictError('User still owns one or more rooms, transfer ownership first');
   }
 }
 
 export function assertIsRoomId(roomId: string): void {
   if (!roomId) {
-    throw new BadRequestError();
+    throw new BadRequestError('roomId is required');
   }
 }
 
 export function assertIsUserId(userId: string): void {
   if (!userId) {
-    throw new BadRequestError();
+    throw new BadRequestError('userId is required');
   }
 }
 
 export function assertIsMessageId(messageId: string): void {
   if (!messageId) {
-    throw new BadRequestError();
+    throw new BadRequestError('messageId is required');
   }
 }
 
 export function assertIsDifferentUser(userId1: string, userId2: string) {
   if (userId1 === userId2) {
-    throw new BadRequestError();
+    throw new BadRequestError('userId1 and userId2 must be different');
   }
 }
 
 export function assertIsEmailVerified(email_verified: boolean) {
   if (!email_verified) {
-    throw new UnauthorizedError();
+    throw new UnauthorizedError('Email is not verified by the provider');
   }
 }
