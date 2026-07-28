@@ -5,7 +5,7 @@ import * as z from 'zod';
 import { ForbiddenError, BadRequestError, NotFoundError, UnauthorizedError, ConflictError, GoneError } from './checks.js';
 
 export const catchError =
-  <P = ParamsDictionary, ResBody = any, ReqBody = any, ReqQuery = ParsedQs>(
+  <P = ParamsDictionary, ResBody = unknown, ReqBody = unknown, ReqQuery = ParsedQs>(
     fn: RequestHandler<P, ResBody, ReqBody, ReqQuery>,
   ) =>
   (
