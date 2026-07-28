@@ -6,7 +6,10 @@ export const roomRouter = express.Router();
 
 roomRouter.get('/', catchError(roomController.getAll));
 roomRouter.get('/mine', catchError(roomController.getAllByUserId));
-roomRouter.get('/:roomId/members', catchError(roomController.getAllUserByRoomId));
+roomRouter.get(
+  '/:roomId/members',
+  catchError(roomController.getAllUserByRoomId),
+);
 roomRouter.post('/', catchError(roomController.create));
 roomRouter.delete('/:roomId', catchError(roomController.delete));
 roomRouter.patch('/:roomId', catchError(roomController.update));

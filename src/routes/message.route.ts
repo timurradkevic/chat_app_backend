@@ -4,7 +4,10 @@ import { messageController } from '../controllers/message.controller.js';
 
 export const messageRouter = express.Router();
 
-messageRouter.get('/room/:roomId', catchError(messageController.getAllByRoomId));
+messageRouter.get(
+  '/room/:roomId',
+  catchError(messageController.getAllByRoomId),
+);
 messageRouter.get('/:messageId', catchError(messageController.getOneById));
 messageRouter.post('/', catchError(messageController.create));
 messageRouter.delete('/:messageId', catchError(messageController.delete));

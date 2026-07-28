@@ -1,5 +1,5 @@
 import type { Room } from '../generated/prisma/client.js';
-import { Role } from '../generated/prisma/enums.js'
+import { Role } from '../generated/prisma/enums.js';
 import { prisma } from '../lib/prisma.js';
 
 type RoomData = Omit<Room, 'id' | 'createdAt' | 'updatedAt'>;
@@ -12,7 +12,9 @@ export const roomService = {
   },
 
   async getAllByUserId(userId: string) {
-    const rooms = await prisma.room.findMany({ where: { members: { some: { userId }}}});
+    const rooms = await prisma.room.findMany({
+      where: { members: { some: { userId } } },
+    });
 
     return rooms;
   },
@@ -118,10 +120,20 @@ export const roomService = {
     return updatedRoom;
   },
 
-  async transferOwnership(roomId: string, fromUserId: string, toUserId: string) {
+  async transferOwnership(
+    roomId: string,
+    fromUserId: string,
+    toUserId: string,
+  ) {
     const updatedOwner = await prisma.$transaction(async (tx) => {
-      const updatedRoomOwner = await tx.roomMember.update({ where: { userId_roomId: { userId: toUserId, roomId } }, data: { role: Role.OWNER } });
-      await tx.roomMember.update({ where: { userId_roomId: { userId: fromUserId, roomId } }, data: { role: Role.ADMIN } });
+      const updatedRoomOwner = await tx.roomMember.update({
+        where: { userId_roomId: { userId: toUserId, roomId } },
+        data: { role: Role.OWNER },
+      });
+      await tx.roomMember.update({
+        where: { userId_roomId: { userId: fromUserId, roomId } },
+        data: { role: Role.ADMIN },
+      });
 
       return updatedRoomOwner;
     });

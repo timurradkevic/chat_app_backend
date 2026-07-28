@@ -11,5 +11,8 @@ userRouter.patch('/me/password', catchError(userController.updatePassword));
 userRouter.delete('/me', catchError(userController.delete));
 userRouter.post('/login', catchError(userController.login));
 userRouter.post('/google', catchError(userController.loginWithGoogle));
-userRouter.get('/activation/:activationToken', catchError(userController.activate));
+userRouter.get(
+  '/activation/:activationToken',
+  catchError(userController.activate),
+);
 userRouter.post('/activation', catchError(userController.resendActivation));

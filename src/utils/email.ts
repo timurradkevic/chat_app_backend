@@ -9,7 +9,6 @@ if (!EMAIL || !EMAIL_PASSWORD || !SMTP_HOST || !SMTP_PORT) {
   throw new Error('EMAIL, EMAIL_PASSWORD, SMTP_HOST and SMTP_PORT must be set');
 }
 
-
 const transporter = nodemailer.createTransport({
   host: SMTP_HOST,
   port: SMTP_PORT,

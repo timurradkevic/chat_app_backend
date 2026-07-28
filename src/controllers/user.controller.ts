@@ -1,7 +1,17 @@
 import type { Request, Response, NextFunction } from 'express';
 import * as z from 'zod';
 import { userService } from '../services/user.service.js';
-import { assertHasNoOwnedRooms, assertIsCorrectEmailAndPassword, assertIsCorrectPassword, assertIsUniqueEmail, assertIsUser, assertIsValidToken, assertIsConfirmedEmail, assertIsValidGoogleToken, assertIsEmailVerified } from '../utils/checks.js';
+import {
+  assertHasNoOwnedRooms,
+  assertIsCorrectEmailAndPassword,
+  assertIsCorrectPassword,
+  assertIsUniqueEmail,
+  assertIsUser,
+  assertIsValidToken,
+  assertIsConfirmedEmail,
+  assertIsValidGoogleToken,
+  assertIsEmailVerified,
+} from '../utils/checks.js';
 import { AuthUserId } from '../utils/auth.js';
 import type { User } from '../generated/prisma/client.js';
 import { jwtService } from '../utils/jwt.js';
@@ -12,7 +22,7 @@ const stabilizeUser = (user: User) => {
   const { password, ...userWithoutPass } = user;
 
   return userWithoutPass;
-}
+};
 
 const PasswordSchema = z
   .string()
@@ -25,7 +35,7 @@ const PasswordSchema = z
 const RegisterData = z.object({
   email: z.email(),
   name: z.string(),
-  password: PasswordSchema
+  password: PasswordSchema,
 });
 
 const UpdatedUserData = z.object({
@@ -58,7 +68,6 @@ const ResendActivationData = z.object({
   email: z.email(),
 });
 
-
 export const userController = {
   async register(req: Request, res: Response, next: NextFunction) {
     const { registerData } = req.body;
@@ -67,7 +76,10 @@ export const userController = {
     await assertIsUniqueEmail(verifiedData.email);
 
     const user = await userService.create(verifiedData);
-    const rawToken = await tokenService.create({ userId: user.id, type: 'ACTIVATION' });
+    const rawToken = await tokenService.create({
+      userId: user.id,
+      type: 'ACTIVATION',
+    });
 
     await mailer.sendActivationEmail(user.email, rawToken);
 
@@ -123,7 +135,10 @@ export const userController = {
     const { loginData } = req.body;
     const verifiedData = LoginData.parse(loginData);
 
-    const user = await assertIsCorrectEmailAndPassword(verifiedData.email, verifiedData.password);
+    const user = await assertIsCorrectEmailAndPassword(
+      verifiedData.email,
+      verifiedData.password,
+    );
 
     assertIsConfirmedEmail(user);
 
@@ -136,9 +151,12 @@ export const userController = {
     const { googleLoginData } = req.body;
     const verifiedData = GoogleLoginData.parse(googleLoginData);
 
-    const googleTokenData = await assertIsValidGoogleToken(verifiedData.idToken);
+    const googleTokenData = await assertIsValidGoogleToken(
+      verifiedData.idToken,
+    );
 
-    const { email, sub, name, email_verified } = GoogleTokenData.parse(googleTokenData);
+    const { email, sub, name, email_verified } =
+      GoogleTokenData.parse(googleTokenData);
 
     assertIsEmailVerified(email_verified);
 
@@ -169,7 +187,11 @@ export const userController = {
     }
   },
 
-  async activate(req: Request<{ activationToken: string }>, res: Response, next: NextFunction) {
+  async activate(
+    req: Request<{ activationToken: string }>,
+    res: Response,
+    next: NextFunction,
+  ) {
     const { activationToken } = req.params;
     const tokenRecord = await assertIsValidToken(activationToken, 'ACTIVATION');
 
@@ -185,7 +207,10 @@ export const userController = {
     const user = await userService.getOneByEmail(verifiedData.email);
 
     if (user && user.confirmedEmail === false) {
-      const rawToken = await tokenService.reissue({type: 'ACTIVATION', userId: user.id });
+      const rawToken = await tokenService.reissue({
+        type: 'ACTIVATION',
+        userId: user.id,
+      });
 
       mailer.sendActivationEmail(user.email, rawToken);
     }

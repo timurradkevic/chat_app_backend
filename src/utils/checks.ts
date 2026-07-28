@@ -1,10 +1,10 @@
-import type { Role, TokenTypes } from "../generated/prisma/enums.js";
-import { messageService } from "../services/message.service.js";
-import { roomService } from "../services/room.service.js";
-import { userService } from "../services/user.service.js";
-import type { User } from "../generated/prisma/client.js";
-import { tokenService } from "../services/token.service.js";
-import { googleService } from "./google.js";
+import type { Role, TokenTypes } from '../generated/prisma/enums.js';
+import { messageService } from '../services/message.service.js';
+import { roomService } from '../services/room.service.js';
+import { userService } from '../services/user.service.js';
+import type { User } from '../generated/prisma/client.js';
+import { tokenService } from '../services/token.service.js';
+import { googleService } from './google.js';
 
 export class ForbiddenError extends Error {
   constructor(message = 'Forbidden') {
@@ -47,24 +47,37 @@ export class GoneError extends Error {
   }
 }
 
-export async function assertIsOwner(userId: string, roomId: string): Promise<void> {
+export async function assertIsOwner(
+  userId: string,
+  roomId: string,
+): Promise<void> {
   const role = await roomService.getMemberRole(userId, roomId);
   if (role !== 'OWNER') {
     throw new ForbiddenError('Only the room owner can perform this action');
   }
 }
 
-export async function assertIsOwnerTryingToLeave(userId: string, roomId: string): Promise<void> {
+export async function assertIsOwnerTryingToLeave(
+  userId: string,
+  roomId: string,
+): Promise<void> {
   const role = await roomService.getMemberRole(userId, roomId);
   if (role === 'OWNER') {
-    throw new ConflictError('Owner cannot leave the room, transfer ownership first');
+    throw new ConflictError(
+      'Owner cannot leave the room, transfer ownership first',
+    );
   }
 }
 
-export async function assertIsAdminOrOwner(userId: string, roomId: string): Promise<void> {
+export async function assertIsAdminOrOwner(
+  userId: string,
+  roomId: string,
+): Promise<void> {
   const role = await roomService.getMemberRole(userId, roomId);
   if (role !== 'ADMIN' && role !== 'OWNER') {
-    throw new ForbiddenError('Only room admins or the owner can perform this action');
+    throw new ForbiddenError(
+      'Only room admins or the owner can perform this action',
+    );
   }
 }
 
@@ -74,12 +87,19 @@ export function assertIsAuthor(userId: string, authorId: string) {
   }
 }
 
-export async function assertHasHigherRole(actorId: string, targetId: string, roomId: string, newRole?: Role): Promise<void> {
+export async function assertHasHigherRole(
+  actorId: string,
+  targetId: string,
+  roomId: string,
+  newRole?: Role,
+): Promise<void> {
   const targetRole = await roomService.getMemberRole(targetId, roomId);
   const actorRole = await roomService.getMemberRole(actorId, roomId);
 
   if (actorRole !== 'ADMIN' && actorRole !== 'OWNER') {
-    throw new ForbiddenError('Only admins or the owner can change member roles');
+    throw new ForbiddenError(
+      'Only admins or the owner can change member roles',
+    );
   }
 
   if (targetRole === 'OWNER') {
@@ -87,22 +107,30 @@ export async function assertHasHigherRole(actorId: string, targetId: string, roo
   }
 
   if (targetRole === 'ADMIN' && actorRole !== 'OWNER') {
-    throw new ForbiddenError('Only the owner can change an admin\'s role');
+    throw new ForbiddenError("Only the owner can change an admin's role");
   }
 
   if (actorRole !== 'OWNER' && (newRole === 'ADMIN' || newRole === 'OWNER')) {
-    throw new ForbiddenError('Only the owner can assign the admin or owner role');
+    throw new ForbiddenError(
+      'Only the owner can assign the admin or owner role',
+    );
   }
 }
 
-export async function assertIsUserInRoom(userId: string, roomId: string): Promise<void> {
+export async function assertIsUserInRoom(
+  userId: string,
+  roomId: string,
+): Promise<void> {
   const isUserInRoom = await roomService.checkIsUserIn(userId, roomId);
   if (!isUserInRoom) {
     throw new ForbiddenError('User is not a member of this room');
   }
 }
 
-export async function assertIsUserIsNotInRoom(userId: string, roomId: string): Promise<void> {
+export async function assertIsUserIsNotInRoom(
+  userId: string,
+  roomId: string,
+): Promise<void> {
   const isUserInRoom = await roomService.checkIsUserIn(userId, roomId);
   if (isUserInRoom) {
     throw new ForbiddenError('User is already a member of this room');
@@ -145,14 +173,20 @@ export async function assertIsUniqueEmail(email: string) {
   return user;
 }
 
-export async function assertIsCorrectPassword(user: User, plainPassword: string) {
+export async function assertIsCorrectPassword(
+  user: User,
+  plainPassword: string,
+) {
   const isValid = await userService.verifyPassword(user, plainPassword);
   if (!isValid) {
     throw new UnauthorizedError('Incorrect password');
   }
 }
 
-export async function assertIsCorrectEmailAndPassword(userEmail: string, plainPassword: string) {
+export async function assertIsCorrectEmailAndPassword(
+  userEmail: string,
+  plainPassword: string,
+) {
   // Note: both branches intentionally share the same message.
   // Returning "user not found" vs "wrong password" separately would let an
   // attacker enumerate which emails are registered, so we keep it generic here.
@@ -199,7 +233,9 @@ export async function assertIsValidGoogleToken(googleToken: string) {
 export async function assertHasNoOwnedRooms(userId: string) {
   const hasOwnedRoom = await roomService.hasOwnedRoom(userId);
   if (hasOwnedRoom) {
-    throw new ConflictError('User still owns one or more rooms, transfer ownership first');
+    throw new ConflictError(
+      'User still owns one or more rooms, transfer ownership first',
+    );
   }
 }
 

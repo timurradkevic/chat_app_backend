@@ -2,8 +2,8 @@ import type { User } from '../generated/prisma/client.js';
 import { prisma } from '../lib/prisma.js';
 import bcrypt from 'bcrypt';
 
-type UserData = Pick<User, 'name' | 'email' | 'password' >;
-type UserGoogleData = Pick<User, 'name' | 'email' | 'googleId' >;
+type UserData = Pick<User, 'name' | 'email' | 'password'>;
+type UserGoogleData = Pick<User, 'name' | 'email' | 'googleId'>;
 type UpdatedUserData = Pick<User, 'name' | 'email'>;
 
 export const userService = {
@@ -20,20 +20,34 @@ export const userService = {
   },
 
   async getOneByGoogleId(userGoogleId: string) {
-    const user = await prisma.user.findUnique({ where: { googleId: userGoogleId } });
+    const user = await prisma.user.findUnique({
+      where: { googleId: userGoogleId },
+    });
 
     return user;
   },
 
   async create(userData: UserData) {
-    const hashPass = userData.password ? await bcrypt.hash(userData.password, 10) : null;
-    const user = await prisma.user.create({ data: { email: userData.email, name: userData.name, password: hashPass } });
+    const hashPass = userData.password
+      ? await bcrypt.hash(userData.password, 10)
+      : null;
+    const user = await prisma.user.create({
+      data: { email: userData.email, name: userData.name, password: hashPass },
+    });
 
     return user;
   },
 
   async createFromGoogle(userGoogleData: UserGoogleData) {
-    const user = await prisma.user.create({ data: { email: userGoogleData.email, name: userGoogleData.name, password: null, googleId: userGoogleData.googleId, confirmedEmail: true } });
+    const user = await prisma.user.create({
+      data: {
+        email: userGoogleData.email,
+        name: userGoogleData.name,
+        password: null,
+        googleId: userGoogleData.googleId,
+        confirmedEmail: true,
+      },
+    });
 
     return user;
   },
@@ -72,7 +86,10 @@ export const userService = {
   },
 
   async verifyPassword(user: User, plainPassword: string) {
-    const isValidPassword = await bcrypt.compare(plainPassword, user?.password ?? '');
+    const isValidPassword = await bcrypt.compare(
+      plainPassword,
+      user?.password ?? '',
+    );
 
     return isValidPassword;
   },

@@ -2,10 +2,22 @@ import type { NextFunction, Request, RequestHandler, Response } from 'express';
 import type { ParamsDictionary } from 'express-serve-static-core';
 import type { ParsedQs } from 'qs';
 import * as z from 'zod';
-import { ForbiddenError, BadRequestError, NotFoundError, UnauthorizedError, ConflictError, GoneError } from './checks.js';
+import {
+  ForbiddenError,
+  BadRequestError,
+  NotFoundError,
+  UnauthorizedError,
+  ConflictError,
+  GoneError,
+} from './checks.js';
 
 export const catchError =
-  <P = ParamsDictionary, ResBody = unknown, ReqBody = unknown, ReqQuery = ParsedQs>(
+  <
+    P = ParamsDictionary,
+    ResBody = unknown,
+    ReqBody = unknown,
+    ReqQuery = ParsedQs,
+  >(
     fn: RequestHandler<P, ResBody, ReqBody, ReqQuery>,
   ) =>
   (
@@ -15,7 +27,9 @@ export const catchError =
   ) => {
     Promise.resolve(fn(req, res, next)).catch((err) => {
       if (err instanceof z.ZodError) {
-        (res as Response).status(400).send({ message: 'Validation error', errors: err.issues });
+        (res as Response)
+          .status(400)
+          .send({ message: 'Validation error', errors: err.issues });
         return;
       }
       if (err instanceof ForbiddenError) {

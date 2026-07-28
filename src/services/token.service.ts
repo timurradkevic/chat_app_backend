@@ -15,7 +15,9 @@ export const tokenService = {
     const rawToken = randomBytes(32).toString('hex');
     const tokenHash = createHash('sha256').update(rawToken).digest('hex');
 
-    await prisma.token.create({ data: { ...tokenData, tokenHash, expiredTime } });
+    await prisma.token.create({
+      data: { ...tokenData, tokenHash, expiredTime },
+    });
 
     return rawToken;
   },
@@ -39,8 +41,14 @@ export const tokenService = {
     const rawToken = randomBytes(32).toString('hex');
     const tokenHash = createHash('sha256').update(rawToken).digest('hex');
 
-    await prisma.token.upsert({ where: { userId_type: { type: tokenData.type, userId: tokenData.userId } }, update: { tokenHash, expiredTime }, create: { ...tokenData, tokenHash, expiredTime } });
+    await prisma.token.upsert({
+      where: {
+        userId_type: { type: tokenData.type, userId: tokenData.userId },
+      },
+      update: { tokenHash, expiredTime },
+      create: { ...tokenData, tokenHash, expiredTime },
+    });
 
     return rawToken;
-  }
+  },
 };
