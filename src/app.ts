@@ -4,6 +4,8 @@ import { errorMiddleware } from './middlewares/error.middleware.js';
 import { roomRouter } from './routes/room.route.js';
 import { messageRouter } from './routes/message.route.js';
 import { userRouter } from './routes/user.route.js';
+import http from 'http';
+import { attachSocket } from './lib/socket.js';
 
 const PORT = process.env.PORT || 3000;
 const app = express();
@@ -17,4 +19,10 @@ app.use('/users', userRouter);
 
 app.use(errorMiddleware);
 
-app.listen(PORT);
+const server = http.createServer(app);
+
+attachSocket(server);
+
+server.listen(PORT, () => {
+  console.log(`Server is running on port ${PORT}`);
+});

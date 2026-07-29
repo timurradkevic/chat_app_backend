@@ -9,6 +9,7 @@ import {
   assertIsRoomId,
   assertIsUserInRoom,
 } from '../utils/checks.js';
+import { messageEmitter } from '../lib/messageEmmiter.js';
 
 const CreateMessageData = z.object({
   content: z.string(),
@@ -71,6 +72,8 @@ export const messageController = {
 
     const message = await messageService.create(verifiedData);
 
+    messageEmitter.emit('message:created', message);
+
     res.status(201).send(message);
   },
 
@@ -89,6 +92,8 @@ export const messageController = {
     assertIsAuthor(id, message.userId || '');
 
     await messageService.delete(messageId);
+
+    messageEmitter.emit('message:deleted', { messageId, roomId: message.roomId });
 
     res.sendStatus(204);
   },
@@ -117,6 +122,8 @@ export const messageController = {
     };
 
     const updatedMessage = await messageService.update(messageId, verifiedData);
+
+    messageEmitter.emit('message:updated', updatedMessage);
 
     res.send(updatedMessage);
   },
