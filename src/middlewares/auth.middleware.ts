@@ -1,0 +1,39 @@
+import type { NextFunction, Request, Response } from 'express';
+import { UnauthorizedError } from '../utils/checks.js';
+import { jwtService } from '../utils/jwt.js';
+import { JsonWebTokenError } from 'jsonwebtoken';
+import { userService } from '../services/user.service.js';
+
+export const authMiddleware = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) => {
+  const authorization = req.headers['authorization'] || '';
+  const [, token] = authorization.split(' ');
+
+  if (!token || !authorization.startsWith('Bearer ')) {
+    throw new UnauthorizedError('Authorization header is missing or malformed');
+  }
+
+  try {
+    const { userId } = jwtService.verify(token);
+    const user = await userService.getOneById(userId);
+    if (!user) {
+      throw new UnauthorizedError('User not found');
+    }
+    req.user = {
+      id: user.id,
+      email: user.email,
+      name: user.name,
+    };
+  } catch (error) {
+    if (error instanceof JsonWebTokenError) {
+      throw new UnauthorizedError('Invalid or expired token');
+    }
+
+    throw error;
+  }
+
+  return next();
+};
