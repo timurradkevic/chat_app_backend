@@ -1,8 +1,11 @@
 import express from 'express';
 import { catchError } from '../utils/catchError.js';
 import { messageController } from '../controllers/message.controller.js';
+import { authMiddleware } from '../middlewares/auth.middleware.js';
 
 export const messageRouter = express.Router();
+
+messageRouter.use(catchError(authMiddleware));
 
 messageRouter.get(
   '/room/:roomId',

@@ -1,7 +1,6 @@
 import type { NextFunction, Request, Response } from 'express';
 import { messageService } from '../services/message.service.js';
 import * as z from 'zod';
-import { AuthUserId } from '../utils/auth.js';
 import {
   assertIsAuthor,
   assertIsMessage,
@@ -26,7 +25,7 @@ export const messageController = {
     res: Response,
     next: NextFunction,
   ) {
-    const { id } = AuthUserId.parse(req.body); // req.user
+    const { id } = req.user;
     const { roomId } = req.params;
 
     assertIsRoomId(roomId);
@@ -45,7 +44,7 @@ export const messageController = {
     res: Response,
     next: NextFunction,
   ) {
-    const { id } = AuthUserId.parse(req.body);
+    const { id } = req.user;
     const { messageId } = req.params;
 
     assertIsMessageId(messageId);
@@ -58,7 +57,7 @@ export const messageController = {
   },
 
   async create(req: Request, res: Response, next: NextFunction) {
-    const { id } = AuthUserId.parse(req.body); // req.user
+    const { id } = req.user;
     const { messageData } = req.body;
 
     const verifiedData = {
@@ -80,7 +79,7 @@ export const messageController = {
     res: Response,
     next: NextFunction,
   ) {
-    const { id } = AuthUserId.parse(req.body); // req.user
+    const { id } = req.user;
     const { messageId } = req.params;
 
     assertIsMessageId(messageId);
@@ -99,7 +98,7 @@ export const messageController = {
     res: Response,
     next: NextFunction,
   ) {
-    const { id } = AuthUserId.parse(req.body); // req.user
+    const { id } = req.user;
     const { messageId } = req.params;
     const { messageData } = req.body;
 

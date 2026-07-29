@@ -1,7 +1,6 @@
 import type { Request, Response, NextFunction } from 'express';
 import * as z from 'zod';
 import { roomService } from '../services/room.service.js';
-import { AuthUserId } from '../utils/auth.js';
 import { Role } from '../generated/prisma/enums.js';
 import {
   assertHasHigherRole,
@@ -19,7 +18,6 @@ import {
 
 const RoomData = z.object({
   name: z.string(),
-  ownerId: z.string(),
 });
 
 const UpdatedRoomData = z.object({
@@ -42,7 +40,7 @@ export const roomController = {
   },
 
   async getAllByUserId(req: Request, res: Response, next: NextFunction) {
-    const { id } = AuthUserId.parse(req.body); // req.user
+    const { id } = req.user;
 
     const rooms = await roomService.getAllByUserId(id);
 
@@ -62,11 +60,12 @@ export const roomController = {
   },
 
   async create(req: Request, res: Response, next: NextFunction) {
+    const { id } = req.user;
     const { roomData } = req.body;
 
     const verifiedData = RoomData.parse(roomData);
 
-    const room = await roomService.create(verifiedData);
+    const room = await roomService.create({ ...verifiedData, ownerId: id });
 
     res.status(201).send(room);
   },
@@ -76,7 +75,7 @@ export const roomController = {
     res: Response,
     next: NextFunction,
   ) {
-    const { id } = AuthUserId.parse(req.body); // req.user
+    const { id } = req.user;
     const { roomId } = req.params;
 
     assertIsRoomId(roomId);
@@ -95,7 +94,7 @@ export const roomController = {
     res: Response,
     next: NextFunction,
   ) {
-    const { id } = AuthUserId.parse(req.body); // req.user
+    const { id } = req.user;
     const { roomId } = req.params;
     const { roomData } = req.body;
 
@@ -120,7 +119,7 @@ export const roomController = {
     res: Response,
     next: NextFunction,
   ) {
-    const { id } = AuthUserId.parse(req.body); // req.user
+    const { id } = req.user;
     const { userId } = AddUserBody.parse(req.body);
     const { roomId } = req.params;
 
@@ -144,7 +143,7 @@ export const roomController = {
     res: Response,
     next: NextFunction,
   ) {
-    const { id } = AuthUserId.parse(req.body); // req.user
+    const { id } = req.user;
     const { roomId, userId } = req.params;
 
     assertIsRoomId(roomId);
@@ -169,7 +168,7 @@ export const roomController = {
     res: Response,
     next: NextFunction,
   ) {
-    const { id } = AuthUserId.parse(req.body); // req.user
+    const { id } = req.user;
     const { roomId } = req.params;
 
     assertIsRoomId(roomId);
@@ -192,7 +191,7 @@ export const roomController = {
     res: Response,
     next: NextFunction,
   ) {
-    const { id } = AuthUserId.parse(req.body); // req.user
+    const { id } = req.user;
     const { roomId, userId } = req.params;
     const { role } = changeMemberRoleBody.parse(req.body);
 
@@ -221,7 +220,7 @@ export const roomController = {
     res: Response,
     next: NextFunction,
   ) {
-    const { id } = AuthUserId.parse(req.body); // req.user
+    const { id } = req.user;
     const { roomId, userId } = req.params;
 
     assertIsRoomId(roomId);

@@ -1,8 +1,11 @@
 import express from 'express';
 import { catchError } from '../utils/catchError.js';
 import { roomController } from '../controllers/room.controller.js';
+import { authMiddleware } from '../middlewares/auth.middleware.js';
 
 export const roomRouter = express.Router();
+
+roomRouter.use(catchError(authMiddleware));
 
 roomRouter.get('/', catchError(roomController.getAll));
 roomRouter.get('/mine', catchError(roomController.getAllByUserId));

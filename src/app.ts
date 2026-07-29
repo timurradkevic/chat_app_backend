@@ -15,6 +15,6 @@ app.use('/rooms', roomRouter);
 app.use('/messages', messageRouter);
 app.use('/users', userRouter);
 
-app.listen(PORT);
-
 app.use(errorMiddleware);
+
+app.listen(PORT);

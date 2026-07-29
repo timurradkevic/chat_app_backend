@@ -12,7 +12,6 @@ import {
   assertIsValidGoogleToken,
   assertIsEmailVerified,
 } from '../utils/checks.js';
-import { AuthUserId } from '../utils/auth.js';
 import type { User } from '../generated/prisma/client.js';
 import { jwtService } from '../utils/jwt.js';
 import { tokenService } from '../services/token.service.js';
@@ -87,7 +86,7 @@ export const userController = {
   },
 
   async getMe(req: Request, res: Response, next: NextFunction) {
-    const { id } = AuthUserId.parse(req.body);
+    const { id } = req.user;
 
     const user = await assertIsUser(id);
 
@@ -95,7 +94,7 @@ export const userController = {
   },
 
   async update(req: Request, res: Response, next: NextFunction) {
-    const { id } = AuthUserId.parse(req.body);
+    const { id } = req.user;
     const { userData } = req.body;
     const verifiedData = UpdatedUserData.parse(userData);
 
@@ -107,7 +106,7 @@ export const userController = {
   },
 
   async updatePassword(req: Request, res: Response, next: NextFunction) {
-    const { id } = AuthUserId.parse(req.body);
+    const { id } = req.user;
     const { passwordData } = req.body;
     const verifiedData = PasswordData.parse(passwordData);
 
@@ -120,7 +119,7 @@ export const userController = {
   },
 
   async delete(req: Request, res: Response, next: NextFunction) {
-    const { id } = AuthUserId.parse(req.body);
+    const { id } = req.user;
 
     await assertIsUser(id);
 
