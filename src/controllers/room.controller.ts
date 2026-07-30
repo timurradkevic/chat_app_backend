@@ -34,6 +34,9 @@ const changeMemberRoleBody = z.object({
 
 export const roomController = {
   async getAll(req: Request, res: Response, next: NextFunction) {
+    // NOTE: this intentionally returns every room in the system (a public
+    // directory), not just the caller's rooms — see `getAllByUserId` (/mine)
+    // for that
     const rooms = await roomService.getAll();
 
     res.status(200).send(rooms);
@@ -52,7 +55,14 @@ export const roomController = {
     res: Response,
     next: NextFunction,
   ) {
+    const { id } = req.user;
     const { roomId } = req.params;
+
+    assertIsRoomId(roomId);
+
+    await assertIsRoom(roomId);
+
+    await assertIsUserInRoom(id, roomId);
 
     const users = await roomService.getAllUserByRoomId(roomId);
 
@@ -125,13 +135,13 @@ export const roomController = {
 
     assertIsRoomId(roomId);
 
-    await assertIsUser(userId);
+    await assertIsAdminOrOwner(id, roomId);
 
     await assertIsRoom(roomId);
 
-    await assertIsUserIsNotInRoom(userId, roomId);
+    await assertIsUser(userId);
 
-    await assertIsAdminOrOwner(id, roomId);
+    await assertIsUserIsNotInRoom(userId, roomId);
 
     const roomMember = await roomService.addUser(roomId, userId);
 
@@ -150,13 +160,13 @@ export const roomController = {
 
     assertIsUserId(userId);
 
+    await assertHasHigherRole(id, userId, roomId);
+
     await assertIsUser(userId);
 
     await assertIsRoom(roomId);
 
     await assertIsUserInRoom(userId, roomId);
-
-    await assertHasHigherRole(id, userId, roomId);
 
     await roomService.removeUser(roomId, userId);
 
@@ -199,13 +209,13 @@ export const roomController = {
 
     assertIsUserId(userId);
 
+    await assertHasHigherRole(id, userId, roomId, role);
+
     await assertIsUser(userId);
 
     await assertIsRoom(roomId);
 
     await assertIsUserInRoom(userId, roomId);
-
-    await assertHasHigherRole(id, userId, roomId, role);
 
     const updatedMember = await roomService.changeMemberRole(
       userId,

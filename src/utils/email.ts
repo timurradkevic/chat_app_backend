@@ -38,4 +38,16 @@ export const mailer = {
 
     return mailer.send(email, 'Activate', html);
   },
+
+  sendResetPasswordEmail(email: string, token: string) {
+    const href = `${process.env.CLIENT_HOST}/reset-password/${token}`;
+    const html = `
+      <h1>Reset your password</h1>
+      <p>If you requested a password reset, follow the link below. This link expires in 30 minutes.</p>
+      <a href="${href}">${href}</a>
+      <p>If you did not request this, you can safely ignore this email.</p>
+    `;
+
+    return mailer.send(email, 'Reset your password', html);
+  },
 };

@@ -1,7 +1,8 @@
 import type { NextFunction, Request, Response } from 'express';
 import { UnauthorizedError } from '../utils/checks.js';
 import { jwtService } from '../utils/jwt.js';
-import { JsonWebTokenError } from 'jsonwebtoken';
+import pkg from 'jsonwebtoken';
+const { JsonWebTokenError } = pkg;
 import { userService } from '../services/user.service.js';
 
 export const authMiddleware = async (

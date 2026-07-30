@@ -11,6 +11,12 @@ import helmet from 'helmet';
 const PORT = process.env.PORT || 3000;
 const app = express();
 
+// See src/lib/socket.ts for why this matters: only trust X-Forwarded-For
+// when actually deployed behind a reverse proxy that sets it correctly.
+if (process.env.TRUST_PROXY === 'true') {
+  app.set('trust proxy', 1);
+}
+
 app.use(helmet());
 app.use(express.json());
 app.use(

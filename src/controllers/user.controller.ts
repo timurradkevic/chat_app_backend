@@ -67,6 +67,14 @@ const ResendActivationData = z.object({
   email: z.email(),
 });
 
+const RequestPasswordResetData = z.object({
+  email: z.email(),
+});
+
+const ConfirmPasswordResetData = z.object({
+  newPassword: PasswordSchema,
+});
+
 export const userController = {
   async register(req: Request, res: Response, next: NextFunction) {
     const { registerData } = req.body;
@@ -98,9 +106,26 @@ export const userController = {
     const { userData } = req.body;
     const verifiedData = UpdatedUserData.parse(userData);
 
-    await assertIsUser(id);
+    const currentUser = await assertIsUser(id);
 
-    const user = await userService.update(id, verifiedData);
+    const isEmailChanged = verifiedData.email !== currentUser.email;
+
+    if (isEmailChanged) {
+      await assertIsUniqueEmail(verifiedData.email);
+    }
+
+    const user = await userService.update(id, {
+      ...verifiedData,
+      ...(isEmailChanged ? { confirmedEmail: false } : {}),
+    });
+
+    if (isEmailChanged) {
+      const rawToken = await tokenService.reissue({
+        userId: user.id,
+        type: 'ACTIVATION',
+      });
+      await mailer.sendActivationEmail(user.email, rawToken);
+    }
 
     res.status(200).send(stabilizeUser(user));
   },
@@ -211,8 +236,48 @@ export const userController = {
         userId: user.id,
       });
 
-      mailer.sendActivationEmail(user.email, rawToken);
+      await mailer.sendActivationEmail(user.email, rawToken);
     }
+
+    res.sendStatus(204);
+  },
+
+  async requestPasswordReset(req: Request, res: Response, next: NextFunction) {
+    const { resetPasswordData } = req.body;
+    const verifiedData = RequestPasswordResetData.parse(resetPasswordData);
+
+    const user = await userService.getOneByEmail(verifiedData.email);
+
+    // Always respond 204 regardless of whether the email exists, so this
+    // endpoint can't be used to enumerate registered accounts.
+    if (user) {
+      const rawToken = await tokenService.reissue({
+        type: 'RESET',
+        userId: user.id,
+      });
+
+      await mailer.sendResetPasswordEmail(user.email, rawToken);
+    }
+
+    res.sendStatus(204);
+  },
+
+  async confirmPasswordReset(
+    req: Request<{ resetToken: string }>,
+    res: Response,
+    next: NextFunction,
+  ) {
+    const { resetToken } = req.params;
+    const { resetPasswordData } = req.body;
+    const verifiedData = ConfirmPasswordResetData.parse(resetPasswordData);
+
+    const tokenRecord = await assertIsValidToken(resetToken, 'RESET');
+
+    await userService.updatePassword(
+      tokenRecord.userId,
+      verifiedData.newPassword,
+    );
+    await tokenService.invalidate(tokenRecord.id);
 
     res.sendStatus(204);
   },

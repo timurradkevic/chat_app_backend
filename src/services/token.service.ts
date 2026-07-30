@@ -51,4 +51,8 @@ export const tokenService = {
 
     return rawToken;
   },
+
+  async invalidate(tokenId: string) {
+    await prisma.token.delete({ where: { id: tokenId } });
+  },
 };

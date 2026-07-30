@@ -45,6 +45,31 @@ const connectionCounts = new Map<string, number>();
 const ROOM_EVENT_LIMIT = 20;
 const ROOM_EVENT_WINDOW_MS = 10_000;
 
+// When running behind a reverse proxy (nginx, ALB, Cloudflare, etc.),
+// socket.handshake.address is the proxy's own IP for every connection,
+// which collapses all clients into one bucket for the per-IP connection
+// limit. Set TRUST_PROXY=true only if the app is actually deployed behind
+// a trusted proxy that sets X-Forwarded-For correctly (and strips/overwrites
+// any client-supplied value) — otherwise this header can be spoofed.
+const TRUST_PROXY = process.env.TRUST_PROXY === 'true';
+
+function getClientIp(socket: {
+  handshake: { address: string; headers: Record<string, unknown> };
+}): string {
+  if (TRUST_PROXY) {
+    const forwardedFor = socket.handshake.headers['x-forwarded-for'];
+    const forwardedValue = Array.isArray(forwardedFor)
+      ? forwardedFor[0]
+      : forwardedFor;
+
+    if (typeof forwardedValue === 'string' && forwardedValue.length > 0) {
+      return (forwardedValue.split(',')[0] ?? '').trim();
+    }
+  }
+
+  return socket.handshake.address;
+}
+
 export function attachSocket(server: HttpServer) {
   io.attach(server);
 
@@ -60,7 +85,7 @@ export function attachSocket(server: HttpServer) {
       return next(new Error('Authentication error'));
     }
 
-    const ip = socket.handshake.address;
+    const ip = getClientIp(socket);
     const currentCount = connectionCounts.get(ip) ?? 0;
 
     if (currentCount >= MAX_CONNECTIONS_PER_IP) {
@@ -134,7 +159,7 @@ export function attachSocket(server: HttpServer) {
     socket.on('disconnect', () => {
       console.log('A user disconnected');
 
-      const ip = socket.handshake.address;
+      const ip = getClientIp(socket);
       const currentCount = connectionCounts.get(ip) ?? 0;
 
       if (currentCount <= 1) {

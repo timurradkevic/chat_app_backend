@@ -2,6 +2,7 @@ import type { NextFunction, Request, Response } from 'express';
 import { messageService } from '../services/message.service.js';
 import * as z from 'zod';
 import {
+  assertIsAdminOrOwner,
   assertIsAuthor,
   assertIsMessage,
   assertIsMessageId,
@@ -41,7 +42,7 @@ export const messageController = {
   },
 
   async getOneById(
-    req: Request<{ roomId: string; messageId: string }>,
+    req: Request<{ messageId: string }>,
     res: Response,
     next: NextFunction,
   ) {
@@ -89,7 +90,16 @@ export const messageController = {
 
     const message = await assertIsMessage(messageId);
 
-    assertIsAuthor(id, message.userId || '');
+    if (message.userId === id) {
+      // The requester is the author — always allowed to delete their own message.
+    } else if (message.userId === null) {
+      // The original author's account was deleted; only a room admin/owner
+      // can clean up the orphaned message, since assertIsAuthor would
+      // otherwise forbid everyone (including moderators) forever.
+      await assertIsAdminOrOwner(id, message.roomId);
+    } else {
+      assertIsAuthor(id, message.userId);
+    }
 
     await messageService.delete(messageId);
 

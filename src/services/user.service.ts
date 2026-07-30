@@ -4,7 +4,8 @@ import bcrypt from 'bcrypt';
 
 type UserData = Pick<User, 'name' | 'email' | 'password'>;
 type UserGoogleData = Pick<User, 'name' | 'email' | 'googleId'>;
-type UpdatedUserData = Pick<User, 'name' | 'email'>;
+type UpdatedUserData = Pick<User, 'name' | 'email'> &
+  Partial<Pick<User, 'confirmedEmail'>>;
 
 export const userService = {
   async getOneById(userId: string) {

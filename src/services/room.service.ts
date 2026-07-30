@@ -91,7 +91,7 @@ export const roomService = {
   },
 
   async changeMemberRole(userId: string, roomId: string, role: Role) {
-    const updatedRoomMember = prisma.roomMember.update({
+    const updatedRoomMember = await prisma.roomMember.update({
       where: { userId_roomId: { userId, roomId } },
       data: { role },
     });
