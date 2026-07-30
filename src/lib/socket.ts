@@ -24,6 +24,7 @@ interface InterServerEvents {
 
 interface SocketData {
   userId: string;
+  roomEventTimestamps: number[];
 }
 
 export const io = new Server<
@@ -33,10 +34,16 @@ export const io = new Server<
   SocketData
 >({
   cors: {
-    origin: '*',
+    origin: process.env.CORS_ORIGIN?.split(',') || '*',
     methods: ['GET', 'POST'],
   },
 });
+
+const MAX_CONNECTIONS_PER_IP = 10;
+const connectionCounts = new Map<string, number>();
+
+const ROOM_EVENT_LIMIT = 20;
+const ROOM_EVENT_WINDOW_MS = 10_000;
 
 export function attachSocket(server: HttpServer) {
   io.attach(server);
@@ -53,14 +60,24 @@ export function attachSocket(server: HttpServer) {
       return next(new Error('Authentication error'));
     }
 
+    const ip = socket.handshake.address;
+    const currentCount = connectionCounts.get(ip) ?? 0;
+
+    if (currentCount >= MAX_CONNECTIONS_PER_IP) {
+      return next(new Error('Too many connections from this IP'));
+    }
+
     try {
       const { userId } = jwtService.verify(token);
       socket.data.userId = userId;
+      socket.data.roomEventTimestamps = [];
     } catch (err) {
       console.error('Socket authentication error:', err);
 
       return next(new Error('Authentication error'));
     }
+
+    connectionCounts.set(ip, currentCount + 1);
 
     next();
   });
@@ -68,8 +85,32 @@ export function attachSocket(server: HttpServer) {
   io.on('connection', (socket) => {
     console.log('A user connected');
 
+    function isRoomEventAllowed(): boolean {
+      const now = Date.now();
+      const timestamps = socket.data.roomEventTimestamps.filter(
+        (ts) => now - ts < ROOM_EVENT_WINDOW_MS,
+      );
+
+      if (timestamps.length >= ROOM_EVENT_LIMIT) {
+        socket.data.roomEventTimestamps = timestamps;
+        return false;
+      }
+
+      timestamps.push(now);
+      socket.data.roomEventTimestamps = timestamps;
+      return true;
+    }
+
     socket.on('room:join', async (roomId) => {
-      const isUserInRoom = await roomService.checkIsUserIn(socket.data.userId, roomId);
+      if (!isRoomEventAllowed()) {
+        socket.emit('room:join:error', 'Too many requests, slow down');
+        return;
+      }
+
+      const isUserInRoom = await roomService.checkIsUserIn(
+        socket.data.userId,
+        roomId,
+      );
 
       if (!isUserInRoom) {
         socket.emit('room:join:error', 'You are not a member of this room');
@@ -82,12 +123,25 @@ export function attachSocket(server: HttpServer) {
     });
 
     socket.on('room:leave', (roomId) => {
+      if (!isRoomEventAllowed()) {
+        return;
+      }
+
       socket.leave(roomId);
       console.log(`User ${socket.data.userId} left room ${roomId}`);
     });
 
     socket.on('disconnect', () => {
       console.log('A user disconnected');
+
+      const ip = socket.handshake.address;
+      const currentCount = connectionCounts.get(ip) ?? 0;
+
+      if (currentCount <= 1) {
+        connectionCounts.delete(ip);
+      } else {
+        connectionCounts.set(ip, currentCount - 1);
+      }
     });
   });
 

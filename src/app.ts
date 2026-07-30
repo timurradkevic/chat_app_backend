@@ -6,12 +6,20 @@ import { messageRouter } from './routes/message.route.js';
 import { userRouter } from './routes/user.route.js';
 import http from 'http';
 import { attachSocket } from './lib/socket.js';
+import helmet from 'helmet';
 
 const PORT = process.env.PORT || 3000;
 const app = express();
 
+app.use(helmet());
 app.use(express.json());
-app.use(cors());
+app.use(
+  cors({
+    origin: process.env.CORS_ORIGIN?.split(',') || '*',
+    methods: ['GET', 'POST', 'PATCH', 'DELETE'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+  }),
+);
 
 app.use('/rooms', roomRouter);
 app.use('/messages', messageRouter);
