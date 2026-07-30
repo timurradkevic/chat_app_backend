@@ -55,7 +55,9 @@ describe('roomService', () => {
 
   describe('checkIsUserIn', () => {
     it('returns true when a membership record exists', async () => {
-      vi.mocked(prisma.roomMember.findUnique).mockResolvedValue(makeRoomMember());
+      vi.mocked(prisma.roomMember.findUnique).mockResolvedValue(
+        makeRoomMember(),
+      );
 
       expect(await roomService.checkIsUserIn('user-1', 'room-1')).toBe(true);
     });
@@ -87,7 +89,9 @@ describe('roomService', () => {
         makeRoomMember({ role: Role.ADMIN }),
       );
 
-      expect(await roomService.getMemberRole('user-1', 'room-1')).toBe(Role.ADMIN);
+      expect(await roomService.getMemberRole('user-1', 'room-1')).toBe(
+        Role.ADMIN,
+      );
     });
 
     it('returns null when the user is not a member of the room', async () => {
@@ -102,7 +106,9 @@ describe('roomService', () => {
       const createdRoom = makeRoom();
       const tx = {
         room: {
-          create: vi.fn<TransactionClient['room']['create']>().mockResolvedValue(createdRoom),
+          create: vi
+            .fn<TransactionClient['room']['create']>()
+            .mockResolvedValue(createdRoom),
         },
         roomMember: {
           create: vi
@@ -115,7 +121,10 @@ describe('roomService', () => {
         cb(tx as unknown as TransactionClient),
       );
 
-      const room = await roomService.create({ name: 'Room', ownerId: 'user-1' });
+      const room = await roomService.create({
+        name: 'Room',
+        ownerId: 'user-1',
+      });
 
       expect(room).toEqual(createdRoom);
       expect(tx.roomMember.create).toHaveBeenCalledWith({

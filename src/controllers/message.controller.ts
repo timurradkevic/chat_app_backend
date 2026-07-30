@@ -93,7 +93,10 @@ export const messageController = {
 
     await messageService.delete(messageId);
 
-    messageEmitter.emit('message:deleted', { messageId, roomId: message.roomId });
+    messageEmitter.emit('message:deleted', {
+      messageId,
+      roomId: message.roomId,
+    });
 
     res.sendStatus(204);
   },

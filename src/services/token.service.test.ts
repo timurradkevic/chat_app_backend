@@ -35,7 +35,10 @@ describe('tokenService', () => {
   describe('create', () => {
     it('creates an ACTIVATION token with ~24h expiration and returns a raw hex token', async () => {
       const before = Date.now();
-      const rawToken = await tokenService.create({ userId: 'user-1', type: TokenTypes.ACTIVATION });
+      const rawToken = await tokenService.create({
+        userId: 'user-1',
+        type: TokenTypes.ACTIVATION,
+      });
       const after = Date.now();
 
       expect(rawToken).toMatch(/^[0-9a-f]{64}$/);
@@ -50,8 +53,12 @@ describe('tokenService', () => {
       expect(callArgs.data.tokenHash).not.toBe(rawToken);
 
       const expiredTime = (callArgs.data.expiredTime as Date).getTime();
-      expect(expiredTime).toBeGreaterThanOrEqual(before + 24 * 60 * 60 * 1000 - 1000);
-      expect(expiredTime).toBeLessThanOrEqual(after + 24 * 60 * 60 * 1000 + 1000);
+      expect(expiredTime).toBeGreaterThanOrEqual(
+        before + 24 * 60 * 60 * 1000 - 1000,
+      );
+      expect(expiredTime).toBeLessThanOrEqual(
+        after + 24 * 60 * 60 * 1000 + 1000,
+      );
     });
 
     it('creates a RESET token with ~30min expiration', async () => {
@@ -62,7 +69,9 @@ describe('tokenService', () => {
       const callArgs = vi.mocked(prisma.token.create).mock.calls[0]![0];
       const expiredTime = (callArgs.data.expiredTime as Date).getTime();
 
-      expect(expiredTime).toBeGreaterThanOrEqual(before + 30 * 60 * 1000 - 1000);
+      expect(expiredTime).toBeGreaterThanOrEqual(
+        before + 30 * 60 * 1000 - 1000,
+      );
       expect(expiredTime).toBeLessThanOrEqual(after + 30 * 60 * 1000 + 1000);
     });
   });
@@ -71,17 +80,26 @@ describe('tokenService', () => {
     it('returns null when no token matches the hash', async () => {
       vi.mocked(prisma.token.findUnique).mockResolvedValue(null);
 
-      const result = await tokenService.verify('some-raw-token', TokenTypes.ACTIVATION);
+      const result = await tokenService.verify(
+        'some-raw-token',
+        TokenTypes.ACTIVATION,
+      );
 
       expect(result).toBeNull();
     });
 
     it('returns null when the token exists but has a different type', async () => {
       vi.mocked(prisma.token.findUnique).mockResolvedValue(
-        makeToken({ type: TokenTypes.RESET, expiredTime: new Date(Date.now() + 60_000) }),
+        makeToken({
+          type: TokenTypes.RESET,
+          expiredTime: new Date(Date.now() + 60_000),
+        }),
       );
 
-      const result = await tokenService.verify('some-raw-token', TokenTypes.ACTIVATION);
+      const result = await tokenService.verify(
+        'some-raw-token',
+        TokenTypes.ACTIVATION,
+      );
 
       expect(result).toBeNull();
     });
@@ -91,16 +109,24 @@ describe('tokenService', () => {
         makeToken({ expiredTime: new Date(Date.now() - 1000) }),
       );
 
-      const result = await tokenService.verify('some-raw-token', TokenTypes.ACTIVATION);
+      const result = await tokenService.verify(
+        'some-raw-token',
+        TokenTypes.ACTIVATION,
+      );
 
       expect(result).toBe('expired');
     });
 
     it('returns the token record when it is valid and not expired', async () => {
-      const token = makeToken({ expiredTime: new Date(Date.now() + 1000 * 60 * 60) });
+      const token = makeToken({
+        expiredTime: new Date(Date.now() + 1000 * 60 * 60),
+      });
       vi.mocked(prisma.token.findUnique).mockResolvedValue(token);
 
-      const result = await tokenService.verify('some-raw-token', TokenTypes.ACTIVATION);
+      const result = await tokenService.verify(
+        'some-raw-token',
+        TokenTypes.ACTIVATION,
+      );
 
       expect(result).toEqual(token);
     });
@@ -110,7 +136,10 @@ describe('tokenService', () => {
     it('upserts a token keyed by userId and type, replacing any existing one', async () => {
       vi.mocked(prisma.token.upsert).mockResolvedValue(makeToken());
 
-      await tokenService.reissue({ userId: 'user-1', type: TokenTypes.ACTIVATION });
+      await tokenService.reissue({
+        userId: 'user-1',
+        type: TokenTypes.ACTIVATION,
+      });
 
       expect(prisma.token.upsert).toHaveBeenCalledTimes(1);
       const callArgs = vi.mocked(prisma.token.upsert).mock.calls[0]![0];

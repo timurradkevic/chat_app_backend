@@ -50,14 +50,14 @@ describe('userService', () => {
 
   describe('create', () => {
     it('hashes the password before saving it — the plain password is never persisted', async () => {
-      vi.mocked(prisma.user.create).mockImplementation(
-        (async ({ data }: UserCreateArgs) =>
-          makeUser({
-            email: data.email,
-            name: data.name,
-            password: (data.password as string | null | undefined) ?? null,
-          })) as unknown as typeof prisma.user.create,
-      );
+      vi.mocked(prisma.user.create).mockImplementation((async ({
+        data,
+      }: UserCreateArgs) =>
+        makeUser({
+          email: data.email,
+          name: data.name,
+          password: (data.password as string | null | undefined) ?? null,
+        })) as unknown as typeof prisma.user.create);
 
       const user = await userService.create({
         email: 'test@example.com',
@@ -66,22 +66,24 @@ describe('userService', () => {
       });
 
       expect(user.password).not.toBe('PlainPassword1');
-      expect(await bcrypt.compare('PlainPassword1', user.password as string)).toBe(true);
+      expect(
+        await bcrypt.compare('PlainPassword1', user.password as string),
+      ).toBe(true);
     });
   });
 
   describe('createFromGoogle', () => {
     it('creates a user with confirmedEmail=true and password=null', async () => {
-      vi.mocked(prisma.user.create).mockImplementation(
-        (async ({ data }: UserCreateArgs) =>
-          makeUser({
-            email: data.email,
-            name: data.name,
-            googleId: (data.googleId as string | null | undefined) ?? null,
-            confirmedEmail: Boolean(data.confirmedEmail),
-            password: null,
-          })) as unknown as typeof prisma.user.create,
-      );
+      vi.mocked(prisma.user.create).mockImplementation((async ({
+        data,
+      }: UserCreateArgs) =>
+        makeUser({
+          email: data.email,
+          name: data.name,
+          googleId: (data.googleId as string | null | undefined) ?? null,
+          confirmedEmail: Boolean(data.confirmedEmail),
+          password: null,
+        })) as unknown as typeof prisma.user.create);
 
       const user = await userService.createFromGoogle({
         email: 'test@example.com',
@@ -113,7 +115,9 @@ describe('userService', () => {
     it('returns false without throwing for a Google account that has no password', async () => {
       const user = makeUser({ password: null });
 
-      await expect(userService.verifyPassword(user, 'AnyPassword1')).resolves.toBe(false);
+      await expect(
+        userService.verifyPassword(user, 'AnyPassword1'),
+      ).resolves.toBe(false);
     });
   });
 
@@ -138,7 +142,9 @@ describe('userService', () => {
         where: { id: 'user-1' },
         data: { confirmedEmail: true },
       });
-      expect(tx.token.delete).toHaveBeenCalledWith({ where: { id: 'token-1' } });
+      expect(tx.token.delete).toHaveBeenCalledWith({
+        where: { id: 'token-1' },
+      });
     });
   });
 
@@ -148,9 +154,13 @@ describe('userService', () => {
         user: {
           update: vi
             .fn<TransactionClient['user']['update']>()
-            .mockResolvedValue(makeUser({ confirmedEmail: true, googleId: 'google-123' })),
+            .mockResolvedValue(
+              makeUser({ confirmedEmail: true, googleId: 'google-123' }),
+            ),
         },
-        token: { deleteMany: vi.fn<TransactionClient['token']['deleteMany']>() },
+        token: {
+          deleteMany: vi.fn<TransactionClient['token']['deleteMany']>(),
+        },
       };
 
       vi.mocked(prisma.$transaction).mockImplementation(async (cb) =>
