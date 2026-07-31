@@ -2,7 +2,7 @@ import type { Room } from '../generated/prisma/client.js';
 import { Role } from '../generated/prisma/enums.js';
 import { prisma } from '../lib/prisma.js';
 
-type RoomData = Omit<Room, 'id' | 'createdAt' | 'updatedAt'>;
+type RoomData = Pick<Room, 'name' | 'ownerId'>;
 
 export const roomService = {
   async getAll(page: number = 1, limit: number = 20) {
@@ -10,7 +10,7 @@ export const roomService = {
 
     const [rooms, total] = await Promise.all([
       prisma.room.findMany({
-        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        orderBy: [{ lastActivityAt: 'desc' }, { id: 'desc' }],
         skip,
         take: limit,
       }),
@@ -35,7 +35,7 @@ export const roomService = {
           },
         },
       },
-      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      orderBy: [{ lastActivityAt: 'desc' }, { id: 'desc' }],
       take: limit + 1,
       ...(cursor && {
         cursor: {

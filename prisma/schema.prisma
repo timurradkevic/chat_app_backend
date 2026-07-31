@@ -60,8 +60,11 @@ model Room {
   messages Message[] @relation(name: "room")
   ownerId String
   owner User @relation(fields: [ownerId], references: [id])
+  lastActivityAt DateTime @default(now())
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@index([lastActivityAt])
 }
 
 model RoomMember {

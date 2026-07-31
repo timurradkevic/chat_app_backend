@@ -37,7 +37,22 @@ export const messageService = {
   },
 
   async create(messageData: MessageData) {
-    const message = await prisma.message.create({ data: messageData });
+    const message = await prisma.$transaction(async (tx) => {
+      const message = await tx.message.create({
+        data: messageData,
+      });
+
+      await tx.room.update({
+        where: {
+          id: message.roomId,
+        },
+        data: {
+          lastActivityAt: new Date(),
+        },
+      });
+
+      return message;
+    });
 
     return message;
   },
