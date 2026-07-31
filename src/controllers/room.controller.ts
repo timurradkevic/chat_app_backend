@@ -17,11 +17,11 @@ import {
 } from '../utils/checks.js';
 
 const RoomData = z.object({
-  name: z.string(),
+  name: z.string().min(2, 'Room name cannot be empty').max(100, 'Room name cannot exceed 100 characters'),
 });
 
 const UpdatedRoomData = z.object({
-  name: z.string(),
+  name: z.string().min(2, 'Room name cannot be empty').max(100, 'Room name cannot exceed 100 characters'),
 });
 
 const AddUserBody = z.object({
