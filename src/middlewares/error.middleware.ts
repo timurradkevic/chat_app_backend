@@ -1,3 +1,4 @@
+import { Prisma } from '../generated/prisma/client.js';
 import type { NextFunction, Request, Response } from 'express';
 
 export const errorMiddleware = (
@@ -8,6 +9,21 @@ export const errorMiddleware = (
 ) => {
   if (res.headersSent) {
     return next(error);
+  }
+
+  if (error instanceof Prisma.PrismaClientKnownRequestError) {
+    if (error.code === 'P2002') {
+      return res.status(409).json({
+        message: 'Unique constraint failed',
+        field: error.meta?.target,
+      });
+    }
+
+    if (error.code === 'P2025') {
+      return res.status(404).json({
+        message: 'Record not found',
+      });
+    }
   }
 
   console.error(error);
