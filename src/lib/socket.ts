@@ -6,6 +6,7 @@ import type { Message } from '../generated/prisma/client.js';
 import { roomService } from '../services/room.service.js';
 import * as z from 'zod';
 import { CORS_ORIGIN } from '../app.js';
+import { logger } from './logger.js';
 
 interface ClientToServerEvents {
   'room:join': (roomId: string) => void;
@@ -98,7 +99,7 @@ export function attachSocket(server: HttpServer) {
       socket.data.userId = userId;
       socket.data.roomEventTimestamps = [];
     } catch (err) {
-      console.error('Socket authentication error:', err);
+      logger.error(err, 'Socket authentication error');
 
       return next(new Error('Authentication error'));
     }
@@ -109,7 +110,7 @@ export function attachSocket(server: HttpServer) {
   });
 
   io.on('connection', (socket) => {
-    console.log('A user connected');
+    logger.info({ userId: socket.data.userId }, 'A user connected');
 
     function isRoomEventAllowed(): boolean {
       const now = Date.now();
@@ -145,7 +146,7 @@ export function attachSocket(server: HttpServer) {
       }
 
       socket.join(roomId);
-      console.log(`User ${socket.data.userId} joined room ${roomId}`);
+      logger.info({ userId: socket.data.userId, roomId }, 'User joined room');
     });
 
     socket.on('room:leave', (roomId) => {
@@ -154,11 +155,11 @@ export function attachSocket(server: HttpServer) {
       }
 
       socket.leave(roomId);
-      console.log(`User ${socket.data.userId} left room ${roomId}`);
+      logger.info({ userId: socket.data.userId, roomId }, 'User left room');
     });
 
     socket.on('disconnect', () => {
-      console.log('A user disconnected');
+      logger.info({ userId: socket.data.userId }, 'A user disconnected');
 
       const ip = getClientIp(socket);
       const currentCount = connectionCounts.get(ip) ?? 0;

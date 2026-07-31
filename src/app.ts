@@ -7,6 +7,8 @@ import { userRouter } from './routes/user.route.js';
 import http from 'http';
 import { attachSocket } from './lib/socket.js';
 import helmet from 'helmet';
+import { pinoHttp } from 'pino-http';
+import { logger } from './lib/logger.js';
 
 const PORT = process.env.PORT || 3000;
 const app = express();
@@ -32,6 +34,13 @@ app.use(
   }),
 );
 
+app.use(
+  pinoHttp({
+    logger,
+    genReqId: () => crypto.randomUUID(),
+  }),
+);
+
 app.use('/rooms', roomRouter);
 app.use('/messages', messageRouter);
 app.use('/users', userRouter);
@@ -43,5 +52,10 @@ const server = http.createServer(app);
 attachSocket(server);
 
 server.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}`);
+  logger.info(
+    {
+      port: PORT,
+    },
+    'Server started',
+  );
 });

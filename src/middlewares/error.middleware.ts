@@ -1,5 +1,6 @@
 import { Prisma } from '../generated/prisma/client.js';
 import type { NextFunction, Request, Response } from 'express';
+import { logger } from '../lib/logger.js';
 
 export const errorMiddleware = (
   error: Error,
@@ -26,7 +27,7 @@ export const errorMiddleware = (
     }
   }
 
-  console.error(error);
+  logger.error({ err: error }, 'Unhandled error occurred');
 
   return res.status(500).json({
     message: 'Server error',
