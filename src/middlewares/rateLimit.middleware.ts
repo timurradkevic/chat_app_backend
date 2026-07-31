@@ -75,7 +75,8 @@ export const passwordResetIpRateLimitMiddleware = rateLimit({
 export const passwordResetEmailRateLimitMiddleware = rateLimit({
   windowMs: 24 * 60 * 60 * 1000, // 24 hours
   limit: 3, // Limit each email to 3 reset requests per 24 hours.
-  keyGenerator: (req: Request) => req.body?.resetPasswordData?.email ?? ipKeyGenerator(req.ip ?? ''),
+  keyGenerator: (req: Request) =>
+    req.body?.resetPasswordData?.email ?? ipKeyGenerator(req.ip ?? ''),
 
   store: createRedisStore(),
 

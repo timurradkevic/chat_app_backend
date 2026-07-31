@@ -1,11 +1,14 @@
 import type { Server as HttpServer } from 'http';
-import { Server } from 'socket.io';
+import { randomUUID } from 'crypto';
+import { Server, Socket } from 'socket.io';
 import { messageEmitter } from './messageEmmiter.js';
 import { jwtService } from '../utils/jwt.js';
 import type { Message } from '../generated/prisma/client.js';
 import { roomService } from '../services/room.service.js';
 import * as z from 'zod';
 import { logger } from './logger.js';
+import { pubClient, redis, subClient } from './redis.js';
+import { createAdapter } from '@socket.io/redis-adapter';
 
 interface ClientToServerEvents {
   'room:join': (roomId: string) => void;
@@ -25,7 +28,6 @@ interface InterServerEvents {
 
 interface SocketData {
   userId: string;
-  roomEventTimestamps: number[];
 }
 
 export const CORS_ORIGIN = process.env.CORS_ORIGIN?.split(',');
@@ -47,7 +49,6 @@ export const io = new Server<
 });
 
 const MAX_CONNECTIONS_PER_IP = 10;
-const connectionCounts = new Map<string, number>();
 
 const ROOM_EVENT_LIMIT = 20;
 const ROOM_EVENT_WINDOW_MS = 10_000;
@@ -59,6 +60,48 @@ const ROOM_EVENT_WINDOW_MS = 10_000;
 // a trusted proxy that sets X-Forwarded-For correctly (and strips/overwrites
 // any client-supplied value) — otherwise this header can be spoofed.
 const TRUST_PROXY = process.env.TRUST_PROXY === 'true';
+
+async function incrementConnectionCount(ip: string): Promise<number> {
+  const key = `socket:connections:${ip}`;
+
+  const count = await redis.incr(key);
+
+  if (count === 1) {
+    await redis.expire(key, 60);
+  }
+
+  return count;
+}
+
+async function decrementConnectionCount(ip: string) {
+  const key = `socket:connections:${ip}`;
+
+  await redis.atomicDecrement(key);
+}
+
+async function isRoomEventAllowed(
+  socket: Socket<
+    ClientToServerEvents,
+    ServerToClientEvents,
+    InterServerEvents,
+    SocketData
+  >,
+): Promise<boolean> {
+  const now = Date.now();
+
+  const key = `socket:room-events:${socket.id}`;
+
+  const allowed = await redis.slidingWindowRateLimit(
+    key,
+    now,
+    ROOM_EVENT_WINDOW_MS,
+    ROOM_EVENT_LIMIT,
+    `${now}-${randomUUID()}`,
+    Math.ceil(ROOM_EVENT_WINDOW_MS / 1000),
+  );
+
+  return allowed === 1;
+}
 
 function getClientIp(socket: {
   handshake: { address: string; headers: Record<string, unknown> };
@@ -78,9 +121,10 @@ function getClientIp(socket: {
 }
 
 export function attachSocket(server: HttpServer) {
+  io.adapter(createAdapter(pubClient, subClient));
   io.attach(server);
 
-  io.use((socket, next) => {
+  io.use(async (socket, next) => {
     const tokenResult = z.string().safeParse(socket.handshake.auth.token);
     if (tokenResult.success === false) {
       return next(new Error('Authentication error'));
@@ -93,23 +137,42 @@ export function attachSocket(server: HttpServer) {
     }
 
     const ip = getClientIp(socket);
-    const currentCount = connectionCounts.get(ip) ?? 0;
+    let count: number;
 
-    if (currentCount >= MAX_CONNECTIONS_PER_IP) {
+    try {
+      count = await incrementConnectionCount(ip);
+    } catch (err) {
+      logger.error(err, 'Redis error while incrementing connection count');
+      return next(new Error('Internal server error'));
+    }
+
+    if (count > MAX_CONNECTIONS_PER_IP) {
+      try {
+        await decrementConnectionCount(ip);
+      } catch (err) {
+        logger.error(err, 'Redis error while decrementing connection count');
+      }
+
       return next(new Error('Too many connections from this IP'));
     }
 
     try {
       const { userId } = jwtService.verify(token);
       socket.data.userId = userId;
-      socket.data.roomEventTimestamps = [];
     } catch (err) {
       logger.error(err, 'Socket authentication error');
 
+      try {
+        await decrementConnectionCount(ip);
+      } catch (redisErr) {
+        logger.error(
+          redisErr,
+          'Redis error while decrementing connection count',
+        );
+      }
+
       return next(new Error('Authentication error'));
     }
-
-    connectionCounts.set(ip, currentCount + 1);
 
     next();
   });
@@ -117,25 +180,15 @@ export function attachSocket(server: HttpServer) {
   io.on('connection', (socket) => {
     logger.info({ userId: socket.data.userId }, 'A user connected');
 
-    function isRoomEventAllowed(): boolean {
-      const now = Date.now();
-      const timestamps = socket.data.roomEventTimestamps.filter(
-        (ts) => now - ts < ROOM_EVENT_WINDOW_MS,
-      );
-
-      if (timestamps.length >= ROOM_EVENT_LIMIT) {
-        socket.data.roomEventTimestamps = timestamps;
-        return false;
-      }
-
-      timestamps.push(now);
-      socket.data.roomEventTimestamps = timestamps;
-      return true;
-    }
-
     socket.on('room:join', async (roomId) => {
-      if (!isRoomEventAllowed()) {
-        socket.emit('room:join:error', 'Too many requests, slow down');
+      try {
+        if (!(await isRoomEventAllowed(socket))) {
+          socket.emit('room:join:error', 'Too many requests, slow down');
+          return;
+        }
+      } catch (err) {
+        logger.error(err, 'Redis error while checking room event rate limit');
+        socket.emit('room:join:error', 'Internal server error');
         return;
       }
 
@@ -154,8 +207,13 @@ export function attachSocket(server: HttpServer) {
       logger.info({ userId: socket.data.userId, roomId }, 'User joined room');
     });
 
-    socket.on('room:leave', (roomId) => {
-      if (!isRoomEventAllowed()) {
+    socket.on('room:leave', async (roomId) => {
+      try {
+        if (!(await isRoomEventAllowed(socket))) {
+          return;
+        }
+      } catch (err) {
+        logger.error(err, 'Redis error while checking room event rate limit');
         return;
       }
 
@@ -163,16 +221,12 @@ export function attachSocket(server: HttpServer) {
       logger.info({ userId: socket.data.userId, roomId }, 'User left room');
     });
 
-    socket.on('disconnect', () => {
-      logger.info({ userId: socket.data.userId }, 'A user disconnected');
-
-      const ip = getClientIp(socket);
-      const currentCount = connectionCounts.get(ip) ?? 0;
-
-      if (currentCount <= 1) {
-        connectionCounts.delete(ip);
-      } else {
-        connectionCounts.set(ip, currentCount - 1);
+    socket.on('disconnect', async () => {
+      try {
+        await decrementConnectionCount(getClientIp(socket));
+        await redis.del(`socket:room-events:${socket.id}`);
+      } catch (err) {
+        logger.error(err, 'Redis error during socket disconnect cleanup');
       }
     });
   });
