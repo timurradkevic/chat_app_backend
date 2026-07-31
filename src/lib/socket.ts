@@ -5,6 +5,7 @@ import { jwtService } from '../utils/jwt.js';
 import type { Message } from '../generated/prisma/client.js';
 import { roomService } from '../services/room.service.js';
 import * as z from 'zod';
+import { CORS_ORIGIN } from '../app.js';
 
 interface ClientToServerEvents {
   'room:join': (roomId: string) => void;
@@ -34,7 +35,7 @@ export const io = new Server<
   SocketData
 >({
   cors: {
-    origin: process.env.CORS_ORIGIN?.split(',') || '*',
+    origin: CORS_ORIGIN,
     methods: ['GET', 'POST'],
   },
 });
