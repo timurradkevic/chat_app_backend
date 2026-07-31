@@ -33,6 +33,7 @@ function makeRoom(overrides: Partial<Room> = {}): Room {
     ownerId: 'user-1',
     createdAt: new Date(),
     updatedAt: new Date(),
+    lastActivityAt: new Date(),
     ...overrides,
   };
 }
