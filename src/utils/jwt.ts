@@ -6,9 +6,9 @@ if (!JWT_SECRET) {
   throw new Error('JWT_SECRET is not set');
 }
 
-const JWT_EXPIRES_IN = '7d';
+const JWT_EXPIRES_IN = '15m'; // 15 minutes
 
-type JwtPayload = { userId: string };
+type JwtPayload = { userId: string; tokenVersion: number };
 
 export const jwtService = {
   sign(payload: JwtPayload) {
