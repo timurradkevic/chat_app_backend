@@ -6,6 +6,7 @@ Backend for a chat application: rooms with member roles, real-time messaging ove
 
 - **Node.js 22**, **TypeScript**, **Express 5**
 - **PostgreSQL** + **Prisma** (via `@prisma/adapter-pg`)
+- **Redis** — shared store for rate limiting and Socket.IO horizontal scaling
 - **Socket.IO** — real-time message delivery per room
 - **JWT** — authentication, **bcrypt** — password and activation token hashing
 - **Google OAuth** (`google-auth-library`) — sign-in and sign-up via Google
@@ -27,6 +28,7 @@ Backend for a chat application: rooms with member roles, real-time messaging ove
 
 - Node.js 22.x
 - PostgreSQL (locally or via Docker — see below)
+- Redis (locally or via Docker — see below)
 - An account for sending emails (e.g. Gmail with an app password)
 - A Google OAuth Client ID (for Google sign-in)
 
@@ -38,6 +40,7 @@ Copy `.env.example` to `.env` and fill in the values:
 |---|---|
 | `PORT` | Port the server listens on (defaults to `3000`) |
 | `DATABASE_URL` | PostgreSQL connection string |
+| `REDIS_URL` | Redis connection string (e.g. `redis://localhost:6379` locally, `redis://redis:6379` under Docker Compose, or a `rediss://` URL with credentials for a managed/hosted Redis) |
 | `JWT_SECRET` | Secret used to sign JWTs |
 | `EMAIL` | Address that outgoing emails are sent from |
 | `EMAIL_PASSWORD` | Password (for Gmail — an app password, not the regular one) |
@@ -47,6 +50,8 @@ Copy `.env.example` to `.env` and fill in the values:
 | `CORS_ORIGIN` | Comma-separated list of allowed CORS origins |
 
 ## Running Locally (without Docker)
+
+Make sure Postgres and Redis are both running and reachable at the URLs set in `.env` (e.g. `redis-server` locally, or `docker run -p 6379:6379 redis:8-alpine` if you just want Redis in a container), then:
 
 ```
 npm ci
@@ -63,10 +68,11 @@ docker compose up -d --build
 docker compose --profile tools run --rm migrate
 ```
 
-The first command starts the app and the database. The second runs migrations; it's deliberately kept out of the regular `docker compose up` so migrations don't run automatically on every container restart. The `.env` used by compose should point `DATABASE_URL` at the `db` host, not `localhost`:
+The first command starts the app, the database, and Redis. The second runs migrations; it's deliberately kept out of the regular `docker compose up` so migrations don't run automatically on every container restart. The `.env` used by compose should point `DATABASE_URL` and `REDIS_URL` at the `db` and `redis` hosts, not `localhost`:
 
 ```
 DATABASE_URL=postgresql://user:password@db:5432/node_chat
+REDIS_URL=redis://redis:6379
 ```
 
 ## Scripts
@@ -89,7 +95,7 @@ src/
   services/      — business logic, database access
   middlewares/   — auth, error handling, rate limiting
   routes/        — endpoint definitions
-  lib/           — infrastructure (Prisma client, Socket.IO, event emitter)
+  lib/           — infrastructure (Prisma client, Redis client, Socket.IO, event emitter)
   utils/         — helper utilities (JWT, email, Google, validation)
 prisma/
   schema.prisma  — data model

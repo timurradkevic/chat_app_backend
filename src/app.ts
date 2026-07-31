@@ -9,6 +9,7 @@ import { attachSocket } from './lib/socket.js';
 import helmet from 'helmet';
 import { pinoHttp } from 'pino-http';
 import { logger } from './lib/logger.js';
+import { redis } from './lib/redis.js';
 
 const PORT = process.env.PORT || 3000;
 const app = express();
@@ -40,6 +41,14 @@ app.use(
     genReqId: () => crypto.randomUUID(),
   }),
 );
+
+async function shutdown() {
+  await redis.quit();
+  server.close(() => process.exit(0));
+}
+
+process.on('SIGINT', shutdown);
+process.on('SIGTERM', shutdown);
 
 app.use('/rooms', roomRouter);
 app.use('/messages', messageRouter);
