@@ -160,13 +160,13 @@ export const roomController = {
 
     assertIsUserId(userId);
 
-    await assertHasHigherRole(id, userId, roomId);
-
     await assertIsUser(userId);
 
     await assertIsRoom(roomId);
 
     await assertIsUserInRoom(userId, roomId);
+
+    await assertHasHigherRole(id, userId, roomId);
 
     await roomService.removeUser(roomId, userId);
 
@@ -209,13 +209,13 @@ export const roomController = {
 
     assertIsUserId(userId);
 
-    await assertHasHigherRole(id, userId, roomId, role);
-
     await assertIsUser(userId);
 
     await assertIsRoom(roomId);
 
     await assertIsUserInRoom(userId, roomId);
+
+    await assertHasHigherRole(id, userId, roomId, role);
 
     const updatedMember = await roomService.changeMemberRole(
       userId,
