@@ -5,7 +5,6 @@ import { jwtService } from '../utils/jwt.js';
 import type { Message } from '../generated/prisma/client.js';
 import { roomService } from '../services/room.service.js';
 import * as z from 'zod';
-import { CORS_ORIGIN } from '../app.js';
 import { logger } from './logger.js';
 
 interface ClientToServerEvents {
@@ -27,6 +26,12 @@ interface InterServerEvents {
 interface SocketData {
   userId: string;
   roomEventTimestamps: number[];
+}
+
+export const CORS_ORIGIN = process.env.CORS_ORIGIN?.split(',');
+
+if (!CORS_ORIGIN) {
+  throw new Error('CORS_ORIGIN environment variable is not set');
 }
 
 export const io = new Server<

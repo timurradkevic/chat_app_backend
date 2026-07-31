@@ -10,14 +10,10 @@ import helmet from 'helmet';
 import { pinoHttp } from 'pino-http';
 import { logger } from './lib/logger.js';
 import { redis } from './lib/redis.js';
+import { CORS_ORIGIN } from './lib/socket.js';
 
 const PORT = process.env.PORT || 3000;
 const app = express();
-export const CORS_ORIGIN = process.env.CORS_ORIGIN?.split(',');
-
-if (!CORS_ORIGIN) {
-  throw new Error('CORS_ORIGIN environment variable is not set');
-}
 
 // See src/lib/socket.ts for why this matters: only trust X-Forwarded-For
 // when actually deployed behind a reverse proxy that sets it correctly.
