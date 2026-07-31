@@ -17,11 +17,17 @@ import {
 } from '../utils/checks.js';
 
 const RoomData = z.object({
-  name: z.string().min(2, 'Room name cannot be empty').max(100, 'Room name cannot exceed 100 characters'),
+  name: z
+    .string()
+    .min(2, 'Room name cannot be empty')
+    .max(100, 'Room name cannot exceed 100 characters'),
 });
 
 const UpdatedRoomData = z.object({
-  name: z.string().min(2, 'Room name cannot be empty').max(100, 'Room name cannot exceed 100 characters'),
+  name: z
+    .string()
+    .min(2, 'Room name cannot be empty')
+    .max(100, 'Room name cannot exceed 100 characters'),
 });
 
 const AddUserBody = z.object({
@@ -33,19 +39,43 @@ const changeMemberRoleBody = z.object({
 });
 
 export const roomController = {
-  async getAll(req: Request, res: Response, next: NextFunction) {
+  async getAll(
+    req: Request<
+      undefined,
+      undefined,
+      undefined,
+      { page?: string; limit?: string }
+    >,
+    res: Response,
+    next: NextFunction,
+  ) {
     // NOTE: this intentionally returns every room in the system (a public
     // directory), not just the caller's rooms — see `getAllByUserId` (/mine)
     // for that
-    const rooms = await roomService.getAll();
+    const page = Math.max(Number(req.query.page) || 1, 1);
+    const limit = Math.min(Number(req.query.limit) || 20, 100);
+
+    const rooms = await roomService.getAll(page, limit);
 
     res.status(200).send(rooms);
   },
 
-  async getAllByUserId(req: Request, res: Response, next: NextFunction) {
+  async getAllByUserId(
+    req: Request<
+      undefined,
+      undefined,
+      undefined,
+      { cursor?: string; limit?: string }
+    >,
+    res: Response,
+    next: NextFunction,
+  ) {
     const { id } = req.user;
 
-    const rooms = await roomService.getAllByUserId(id);
+    const cursor = req.query.cursor;
+    const limit = Math.min(Number(req.query.limit) || 20, 100);
+
+    const rooms = await roomService.getAllByUserId(id, cursor, limit);
 
     res.status(200).send(rooms);
   },

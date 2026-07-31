@@ -5,18 +5,57 @@ import { prisma } from '../lib/prisma.js';
 type RoomData = Omit<Room, 'id' | 'createdAt' | 'updatedAt'>;
 
 export const roomService = {
-  async getAll() {
-    const rooms = await prisma.room.findMany();
+  async getAll(page: number = 1, limit: number = 20) {
+    const skip = (page - 1) * limit;
 
-    return rooms;
+    const [rooms, total] = await Promise.all([
+      prisma.room.findMany({
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        skip,
+        take: limit,
+      }),
+      prisma.room.count(),
+    ]);
+
+    return {
+      data: rooms,
+      page,
+      limit,
+      total,
+      pages: Math.ceil(total / limit),
+    };
   },
 
-  async getAllByUserId(userId: string) {
+  async getAllByUserId(userId: string, cursor?: string, limit: number = 20) {
     const rooms = await prisma.room.findMany({
-      where: { members: { some: { userId } } },
+      where: {
+        members: {
+          some: {
+            userId,
+          },
+        },
+      },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      take: limit + 1,
+      ...(cursor && {
+        cursor: {
+          id: cursor,
+        },
+        skip: 1,
+      }),
     });
 
-    return rooms;
+    const hasMore = rooms.length > limit;
+
+    if (hasMore) {
+      rooms.pop();
+    }
+
+    return {
+      data: rooms,
+      hasMore,
+      nextCursor: hasMore ? rooms?.[rooms.length - 1]?.id : null,
+    };
   },
 
   async getAllUserByRoomId(roomId: string) {

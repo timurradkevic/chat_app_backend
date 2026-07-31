@@ -109,7 +109,8 @@ Base prefixes: `/users`, `/rooms`, `/messages`. Registration, login, Google logi
 - `GET /users/me`, `PATCH /users/me`, `PATCH /users/me/password`, `DELETE /users/me`
 
 ### Rooms
-- `GET /rooms`, `GET /rooms/mine`
+- `GET /rooms?page=<number>&limit=<number>` — public list of all rooms (page pagination)
+- `GET /rooms/mine?limit=<number>&cursor=<roomId>` — current user's rooms (cursor pagination)
 - `POST /rooms`, `PATCH /rooms/:roomId`, `DELETE /rooms/:roomId`
 - `GET /rooms/:roomId/members`, `POST /rooms/:roomId/members`
 - `DELETE /rooms/:roomId/members/:userId`, `DELETE /rooms/:roomId/leave`
@@ -117,7 +118,8 @@ Base prefixes: `/users`, `/rooms`, `/messages`. Registration, login, Google logi
 - `PATCH /rooms/:roomId/members/:userId/transfer-ownership`
 
 ### Messages
-- `GET /messages/room/:roomId`, `GET /messages/:messageId`
+- `GET /messages/room/:roomId?limit=<number>&cursor=<messageId>` — room messages (cursor pagination)
+- `GET /messages/:messageId`
 - `POST /messages`, `PUT /messages/:messageId`, `DELETE /messages/:messageId`
 
 ## WebSocket

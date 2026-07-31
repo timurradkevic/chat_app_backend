@@ -29,7 +29,8 @@ export const activationIpRateLimitMiddleware = rateLimit({
 export const activationEmailRateLimitMiddleware = rateLimit({
   windowMs: 24 * 60 * 60 * 1000, // 24 hours
   limit: 3, // Limit each email to 3 requests per `window` (here, per 24 hours).
-  keyGenerator: (req: Request) => req.body?.resendActivationData?.email || req.ip,
+  keyGenerator: (req: Request) =>
+    req.body?.resendActivationData?.email || req.ip,
   standardHeaders: 'draft-8',
   legacyHeaders: false,
   ipv6Subnet: 56,

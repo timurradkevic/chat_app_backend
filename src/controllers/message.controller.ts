@@ -13,17 +13,28 @@ import {
 import { messageEmitter } from '../lib/messageEmmiter.js';
 
 const CreateMessageData = z.object({
-  content: z.string().min(1, 'Message content cannot be empty').max(4000, 'Message content cannot exceed 4000 characters'),
+  content: z
+    .string()
+    .min(1, 'Message content cannot be empty')
+    .max(4000, 'Message content cannot exceed 4000 characters'),
   roomId: z.string(),
 });
 
 const UpdateMessageData = z.object({
-  content: z.string().min(1, 'Message content cannot be empty').max(4000, 'Message content cannot exceed 4000 characters'),
+  content: z
+    .string()
+    .min(1, 'Message content cannot be empty')
+    .max(4000, 'Message content cannot exceed 4000 characters'),
 });
 
 export const messageController = {
   async getAllByRoomId(
-    req: Request<{ roomId: string }>,
+    req: Request<
+      { roomId: string },
+      unknown,
+      unknown,
+      { cursor?: string; limit?: string }
+    >,
     res: Response,
     next: NextFunction,
   ) {
@@ -33,10 +44,12 @@ export const messageController = {
     assertIsRoomId(roomId);
 
     await assertIsRoom(roomId);
-
     await assertIsUserInRoom(id, roomId);
 
-    const messages = await messageService.getAllByRoomId(roomId);
+    const cursor = req.query.cursor;
+    const limit = Math.min(Number(req.query.limit) || 20, 100);
+
+    const messages = await messageService.getAllByRoomId(roomId, cursor, limit);
 
     res.send(messages);
   },

@@ -4,10 +4,28 @@ import { prisma } from '../lib/prisma.js';
 type MessageData = Omit<Message, 'id' | 'createdAt' | 'updatedAt'>;
 
 export const messageService = {
-  async getAllByRoomId(roomId: string) {
-    const messages = await prisma.message.findMany({ where: { roomId } });
+  async getAllByRoomId(roomId: string, cursor?: string, limit: number = 20) {
+    const messages = await prisma.message.findMany({
+      where: { roomId },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      take: limit + 1,
+      ...(cursor && {
+        cursor: { id: cursor },
+        skip: 1,
+      }),
+    });
 
-    return messages;
+    const hasMore = messages.length > limit;
+
+    if (hasMore) {
+      messages.pop();
+    }
+
+    return {
+      data: messages,
+      hasMore,
+      nextCursor: hasMore ? messages?.[messages.length - 1]?.id : null,
+    };
   },
 
   async getOneById(messageId: string) {

@@ -33,12 +33,18 @@ const PasswordSchema = z
 
 const RegisterData = z.object({
   email: z.email(),
-  name: z.string().min(2, 'Name cannot be empty').max(100, 'Name cannot exceed 100 characters'),
+  name: z
+    .string()
+    .min(2, 'Name cannot be empty')
+    .max(100, 'Name cannot exceed 100 characters'),
   password: PasswordSchema,
 });
 
 const UpdatedUserData = z.object({
-  name: z.string().min(2, 'Name cannot be empty').max(100, 'Name cannot exceed 100 characters'),
+  name: z
+    .string()
+    .min(2, 'Name cannot be empty')
+    .max(100, 'Name cannot exceed 100 characters'),
   email: z.email(),
 });
 
