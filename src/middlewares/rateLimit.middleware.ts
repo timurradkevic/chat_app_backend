@@ -58,7 +58,6 @@ export const activationEmailRateLimitMiddleware = rateLimit({
 
   standardHeaders: 'draft-8',
   legacyHeaders: false,
-  ipv6Subnet: 56,
 });
 
 export const passwordResetIpRateLimitMiddleware = rateLimit({
@@ -82,5 +81,4 @@ export const passwordResetEmailRateLimitMiddleware = rateLimit({
 
   standardHeaders: 'draft-8',
   legacyHeaders: false,
-  ipv6Subnet: 56,
 });
