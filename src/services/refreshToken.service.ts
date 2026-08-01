@@ -37,8 +37,14 @@ export const refreshTokenService = {
     const expiredTime = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 days
     const rawToken = randomBytes(32).toString('hex');
     const tokenHash = createHash('sha256').update(rawToken).digest('hex');
-    const finalFamilyId =
-      familyId ?? createHash('sha256').update(rawToken).digest('hex');
+    // A fresh login starts its own family, identified by an independently
+    // generated random id — not derived from the token hash. Family and
+    // token identity are separate concepts; deriving one from the other
+    // (as this used to do) made them coincidentally equal on first login,
+    // which was easy to misread as meaningful and would silently break if
+    // the token-hashing algorithm ever changed independently of family
+    // generation.
+    const finalFamilyId = familyId ?? randomBytes(16).toString('hex');
 
     const deviceLabel = meta?.userAgent?.substring(0, 255) ?? 'Unknown device';
 

@@ -195,6 +195,16 @@ describe('refreshTokenService', () => {
       expect(familyId).toBeTruthy();
       expect(rows[0]?.familyId).toBe(familyId);
     });
+
+    // Regression test: familyId used to be derived by re-hashing the raw
+    // token with the same algorithm as tokenHash, making the two
+    // coincidentally equal on first login. familyId and tokenHash are
+    // separate concepts and must be generated independently.
+    it('generates familyId independently of the token hash', async () => {
+      const { rawToken, familyId } = await refreshTokenService.create('user-1');
+
+      expect(familyId).not.toBe(hash(rawToken));
+    });
   });
 
   describe('verifyAndRotate', () => {
