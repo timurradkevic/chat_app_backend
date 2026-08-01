@@ -160,9 +160,9 @@ export const roomController = {
 
     assertIsRoomId(roomId);
 
-    await assertIsAdminOrOwner(id, roomId);
-
     await assertIsRoom(roomId);
+
+    await assertIsAdminOrOwner(id, roomId);
 
     await assertIsUser(userId);
 

@@ -324,6 +324,59 @@ describe('roomController', () => {
       expect(assertIsUserIsNotInRoom).not.toHaveBeenCalled();
       expect(roomService.addUser).not.toHaveBeenCalled();
     });
+
+    // Regression test: addUser must check room existence *before* the
+    // permission check, matching every other method on this controller.
+    // Previously the order was reversed, so a request against a
+    // non-existent room surfaced as 403 Forbidden (from assertIsAdminOrOwner
+    // finding no membership row) instead of the expected 404 Not Found.
+    it('reports room-not-found (not a permission error) when the room does not exist', async () => {
+      vi.mocked(assertIsRoom).mockRejectedValue(new Error('Room not found'));
+      vi.mocked(assertIsAdminOrOwner).mockRejectedValue(
+        new Error('Only room admins or the owner can perform this action'),
+      );
+
+      const req = makeReq<Request<{ roomId: string }>>({
+        user: { id: 'admin-1' },
+        params: { roomId: 'missing-room' },
+        body: { userId: 'user-1' },
+      });
+      const res = makeRes();
+
+      await expect(roomController.addUser(req, res, next)).rejects.toThrow(
+        'Room not found',
+      );
+
+      // assertIsRoom must run, and win, before assertIsAdminOrOwner is ever
+      // consulted for a room that doesn't exist.
+      expect(assertIsAdminOrOwner).not.toHaveBeenCalled();
+      expect(roomService.addUser).not.toHaveBeenCalled();
+    });
+
+    it('checks room existence before permission for an existing room too', async () => {
+      const callOrder: string[] = [];
+      vi.mocked(assertIsRoom).mockImplementation(async () => {
+        callOrder.push('assertIsRoom');
+        return makeRoom();
+      });
+      vi.mocked(assertIsAdminOrOwner).mockImplementation(async () => {
+        callOrder.push('assertIsAdminOrOwner');
+      });
+      vi.mocked(assertIsUser).mockResolvedValue({} as never);
+      vi.mocked(assertIsUserIsNotInRoom).mockResolvedValue(undefined);
+      vi.mocked(roomService.addUser).mockResolvedValue(makeRoom() as never);
+
+      const req = makeReq<Request<{ roomId: string }>>({
+        user: { id: 'admin-1' },
+        params: { roomId: 'room-1' },
+        body: { userId: 'user-1' },
+      });
+      const res = makeRes();
+
+      await roomController.addUser(req, res, next);
+
+      expect(callOrder).toEqual(['assertIsRoom', 'assertIsAdminOrOwner']);
+    });
   });
 
   describe('leave', () => {
