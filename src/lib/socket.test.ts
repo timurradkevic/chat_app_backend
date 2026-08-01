@@ -42,6 +42,12 @@ vi.mock('../services/room.service.js', () => ({
   },
 }));
 
+vi.mock('../services/user.service.js', () => ({
+  userService: {
+    getOneById: vi.fn(),
+  },
+}));
+
 vi.mock('../utils/jwt.js', () => ({
   jwtService: {
     verify: vi.fn(),
@@ -71,6 +77,7 @@ vi.mock('@socket.io/redis-adapter', () => ({
 
 import { redis } from './redis.js';
 import { roomService } from '../services/room.service.js';
+import { userService } from '../services/user.service.js';
 import { jwtService } from '../utils/jwt.js';
 import type { attachSocket as AttachSocket, io as Io } from './socket.js';
 
@@ -153,6 +160,11 @@ describe('socket.ts', () => {
       tokenVersion: 0,
       sessionId: 'session-1',
     });
+    vi.mocked(userService.getOneById).mockResolvedValue({
+      id: 'user-1',
+      tokenVersion: 0,
+    } as never);
+    vi.mocked(redis.incr).mockResolvedValue(1);
   });
 
   describe('connection middleware (per-IP connection counter)', () => {
@@ -185,6 +197,87 @@ describe('socket.ts', () => {
     });
   });
 
+  describe('connection middleware (tokenVersion revocation check)', () => {
+    it('rejects a connection whose JWT tokenVersion no longer matches the stored user tokenVersion', async () => {
+      vi.mocked(jwtService.verify).mockReturnValue({
+        userId: 'user-1',
+        tokenVersion: 0,
+        sessionId: 'session-1',
+      });
+      // e.g. the user called logoutAll or changed their password after this
+      // JWT was issued, bumping the stored tokenVersion to 1.
+      vi.mocked(userService.getOneById).mockResolvedValue({
+        id: 'user-1',
+        tokenVersion: 1,
+      } as never);
+
+      const socket = makeFakeSocket();
+      const next = vi.fn();
+
+      await middleware(socket, next);
+
+      expect(userService.getOneById).toHaveBeenCalledWith('user-1');
+      expect(next).toHaveBeenCalledWith(expect.any(Error));
+      expect((next.mock.calls[0]![0] as Error).message).toBe('Session revoked');
+      expect(socket.data.userId).toBeUndefined();
+      // The per-IP connection count that was optimistically incremented
+      // must be rolled back on rejection, same as the other failure paths.
+      expect(redis.atomicDecrement).toHaveBeenCalledWith(
+        'socket:connections:127.0.0.1',
+      );
+    });
+
+    it('rejects a connection when the user no longer exists', async () => {
+      vi.mocked(userService.getOneById).mockResolvedValue(null as never);
+
+      const socket = makeFakeSocket();
+      const next = vi.fn();
+
+      await middleware(socket, next);
+
+      expect(next).toHaveBeenCalledWith(expect.any(Error));
+      expect((next.mock.calls[0]![0] as Error).message).toBe('Session revoked');
+    });
+
+    it('allows a connection whose JWT tokenVersion matches the stored user tokenVersion', async () => {
+      vi.mocked(jwtService.verify).mockReturnValue({
+        userId: 'user-1',
+        tokenVersion: 3,
+        sessionId: 'session-1',
+      });
+      vi.mocked(userService.getOneById).mockResolvedValue({
+        id: 'user-1',
+        tokenVersion: 3,
+      } as never);
+
+      const socket = makeFakeSocket();
+      const next = vi.fn();
+
+      await middleware(socket, next);
+
+      expect(next).toHaveBeenCalledWith();
+      expect(socket.data.userId).toBe('user-1');
+      expect(redis.atomicDecrement).not.toHaveBeenCalled();
+    });
+
+    it('rejects the connection and rolls back the connection count if the tokenVersion lookup throws', async () => {
+      vi.mocked(userService.getOneById).mockRejectedValue(new Error('db down'));
+
+      const socket = makeFakeSocket();
+      const next = vi.fn();
+
+      await middleware(socket, next);
+
+      expect(next).toHaveBeenCalledWith(expect.any(Error));
+      expect((next.mock.calls[0]![0] as Error).message).toBe(
+        'Internal server error',
+      );
+      expect(redis.atomicDecrement).toHaveBeenCalledWith(
+        'socket:connections:127.0.0.1',
+      );
+    });
+  });
+
   describe("'disconnect' cleanup", () => {
     it('calls atomicDecrement on the per-IP connection counter and deletes the room-events rate-limit key', async () => {
       const socket = makeFakeSocket({ id: 'socket-42' });
@@ -205,9 +298,14 @@ describe('socket.ts', () => {
   describe("'room:join' sliding-window rate limiting", () => {
     it('rejects the event and never checks room membership when the rate limit is exceeded', async () => {
       vi.mocked(redis.slidingWindowRateLimit).mockResolvedValue(0);
-      const socket = makeFakeSocket({ id: 'socket-7' });
+      const socket = makeFakeSocket({
+        id: 'socket-7',
+        data: { userId: 'user-1' },
+      });
 
       connectionHandler(socket);
+      socket.join.mockClear();
+
       const roomJoinHandler = socket._handlers.get('room:join');
       expect(roomJoinHandler).toBeDefined();
 
@@ -226,7 +324,7 @@ describe('socket.ts', () => {
         'Too many requests, slow down',
       );
       expect(roomService.checkIsUserIn).not.toHaveBeenCalled();
-      expect(socket.join).not.toHaveBeenCalled();
+      expect(socket.join).not.toHaveBeenCalledWith('room-1');
     });
 
     it('proceeds to check room membership and joins the room when the rate limit allows the event', async () => {

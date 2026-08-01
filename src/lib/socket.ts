@@ -5,6 +5,7 @@ import { messageEmitter } from './messageEmmiter.js';
 import { jwtService } from '../utils/jwt.js';
 import type { Message } from '../generated/prisma/client.js';
 import { roomService } from '../services/room.service.js';
+import { userService } from '../services/user.service.js';
 import * as z from 'zod';
 import { logger } from './logger.js';
 import { pubClient, redis, subClient } from './redis.js';
@@ -60,6 +61,10 @@ const ROOM_EVENT_WINDOW_MS = 10_000;
 // a trusted proxy that sets X-Forwarded-For correctly (and strips/overwrites
 // any client-supplied value) — otherwise this header can be spoofed.
 const TRUST_PROXY = process.env.TRUST_PROXY === 'true';
+
+function userRoom(userId: string): string {
+  return `user:${userId}`;
+}
 
 async function incrementConnectionCount(ip: string): Promise<number> {
   const key = `socket:connections:${ip}`;
@@ -156,9 +161,13 @@ export function attachSocket(server: HttpServer) {
       return next(new Error('Too many connections from this IP'));
     }
 
+    let userId: string;
+    let tokenVersion: number;
+
     try {
-      const { userId } = jwtService.verify(token);
-      socket.data.userId = userId;
+      const verified = jwtService.verify(token);
+      userId = verified.userId;
+      tokenVersion = verified.tokenVersion;
     } catch (err) {
       logger.error(err, 'Socket authentication error');
 
@@ -174,11 +183,45 @@ export function attachSocket(server: HttpServer) {
       return next(new Error('Authentication error'));
     }
 
+    try {
+      const user = await userService.getOneById(userId);
+
+      if (!user || user.tokenVersion !== tokenVersion) {
+        try {
+          await decrementConnectionCount(ip);
+        } catch (redisErr) {
+          logger.error(
+            redisErr,
+            'Redis error while decrementing connection count',
+          );
+        }
+
+        return next(new Error('Session revoked'));
+      }
+    } catch (err) {
+      logger.error(err, 'Error while checking user token version');
+
+      try {
+        await decrementConnectionCount(ip);
+      } catch (redisErr) {
+        logger.error(
+          redisErr,
+          'Redis error while decrementing connection count',
+        );
+      }
+
+      return next(new Error('Internal server error'));
+    }
+
+    socket.data.userId = userId;
+
     next();
   });
 
   io.on('connection', (socket) => {
     logger.info({ userId: socket.data.userId }, 'A user connected');
+
+    socket.join(userRoom(socket.data.userId));
 
     socket.on('room:join', async (roomId) => {
       try {
@@ -244,4 +287,8 @@ export function attachSocket(server: HttpServer) {
   });
 
   return io;
+}
+
+export function disconnectUserSockets(userId: string) {
+  io.in(userRoom(userId)).disconnectSockets();
 }

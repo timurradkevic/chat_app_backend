@@ -20,6 +20,7 @@ import { mailer } from '../utils/email.js';
 import { refreshTokenService } from '../services/refreshToken.service.js';
 import { prisma } from '../lib/prisma.js';
 import { logger } from '../lib/logger.js';
+import { disconnectUserSockets } from '../lib/socket.js';
 
 const stabilizeUser = (user: User) => {
   const { password, ...userWithoutPass } = user;
@@ -166,6 +167,8 @@ export const userController = {
       await userService.updatePassword(id, verifiedData.newPassword, tx);
       await refreshTokenService.revokeAllForUser(id, tx);
     });
+
+    disconnectUserSockets(id);
 
     res.sendStatus(204);
   },
@@ -387,6 +390,8 @@ export const userController = {
       await tokenService.invalidate(tokenRecord.id, tx);
     });
 
+    disconnectUserSockets(tokenRecord.userId);
+
     res.sendStatus(204);
   },
 
@@ -408,6 +413,8 @@ export const userController = {
 
     await userService.incrementTokenVersion(id);
     await refreshTokenService.revokeAllForUser(id);
+
+    disconnectUserSockets(id);
 
     res.sendStatus(204);
   },
