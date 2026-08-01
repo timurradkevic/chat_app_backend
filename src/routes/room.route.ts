@@ -9,6 +9,7 @@ roomRouter.use(catchError(authMiddleware));
 
 roomRouter.get('/', catchError(roomController.getAll));
 roomRouter.get('/mine', catchError(roomController.getAllByUserId));
+roomRouter.get('/:roomId', catchError(roomController.getOneById));
 roomRouter.get(
   '/:roomId/members',
   catchError(roomController.getAllUserByRoomId),

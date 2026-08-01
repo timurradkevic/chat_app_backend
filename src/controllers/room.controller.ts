@@ -33,6 +33,20 @@ const changeMemberRoleBody = z.object({
 });
 
 export const roomController = {
+  async getOneById(
+    req: Request<{ roomId: string }>,
+    res: Response,
+    next: NextFunction,
+  ) {
+    const { roomId } = req.params;
+
+    assertIsRoomId(roomId);
+
+    const room = await assertIsRoom(roomId);
+
+    res.status(200).send(room);
+  },
+
   async getAll(
     req: Request<
       undefined,
