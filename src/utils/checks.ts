@@ -2,11 +2,14 @@ import type { Role, TokenTypes } from '../generated/prisma/enums.js';
 import { messageService } from '../services/message.service.js';
 import { roomService } from '../services/room.service.js';
 import { userService } from '../services/user.service.js';
-import type { User } from '../generated/prisma/client.js';
+import type { Prisma, User } from '../generated/prisma/client.js';
+import { prisma } from '../lib/prisma.js';
 import { tokenService } from '../services/token.service.js';
 import { googleService } from './google.js';
 import { refreshTokenService } from '../services/refreshToken.service.js';
 import type { Request } from 'express';
+
+type Tx = Prisma.TransactionClient | typeof prisma;
 
 export class ForbiddenError extends Error {
   constructor(message = 'Forbidden') {
@@ -285,8 +288,8 @@ export async function assertIsValidGoogleToken(googleToken: string) {
   return token;
 }
 
-export async function assertHasNoOwnedRooms(userId: string) {
-  const hasOwnedRoom = await roomService.hasOwnedRoom(userId);
+export async function assertHasNoOwnedRooms(userId: string, tx: Tx = prisma) {
+  const hasOwnedRoom = await roomService.hasOwnedRoom(userId, tx);
   if (hasOwnedRoom) {
     throw new ConflictError(
       'User still owns one or more rooms, transfer ownership first',

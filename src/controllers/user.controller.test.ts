@@ -404,8 +404,8 @@ describe('userController', () => {
       await userController.delete(req, res, next);
 
       expect(assertIsUser).not.toHaveBeenCalled();
-      expect(assertHasNoOwnedRooms).toHaveBeenCalledWith('user-1');
-      expect(userService.delete).toHaveBeenCalledWith('user-1');
+      expect(assertHasNoOwnedRooms).toHaveBeenCalledWith('user-1', {});
+      expect(userService.delete).toHaveBeenCalledWith('user-1', {});
       expect(res.sendStatus).toHaveBeenCalledWith(204);
     });
 

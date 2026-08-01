@@ -1,8 +1,9 @@
-import type { Room } from '../generated/prisma/client.js';
+import type { Prisma, Room } from '../generated/prisma/client.js';
 import { Role } from '../generated/prisma/enums.js';
 import { prisma } from '../lib/prisma.js';
 
 type RoomData = Pick<Room, 'name' | 'ownerId'>;
+type Tx = Prisma.TransactionClient | typeof prisma;
 
 export const roomService = {
   async getAll(page: number = 1, limit: number = 20) {
@@ -81,8 +82,8 @@ export const roomService = {
     return roomMember?.role || null;
   },
 
-  async hasOwnedRoom(userId: string) {
-    const rooms = await prisma.room.findFirst({ where: { ownerId: userId } });
+  async hasOwnedRoom(userId: string, tx: Tx = prisma) {
+    const rooms = await tx.room.findFirst({ where: { ownerId: userId } });
 
     return !!rooms;
   },

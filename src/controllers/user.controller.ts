@@ -178,9 +178,10 @@ export const userController = {
   async delete(req: Request, res: Response, next: NextFunction) {
     const { id } = getAuthUser(req);
 
-    await assertHasNoOwnedRooms(id);
-
-    await userService.delete(id);
+    await prisma.$transaction(async (tx) => {
+      await assertHasNoOwnedRooms(id, tx);
+      await userService.delete(id, tx);
+    });
 
     disconnectUserSockets(id);
 

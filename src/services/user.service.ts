@@ -98,8 +98,8 @@ export const userService = {
     });
   },
 
-  async delete(userId: string) {
-    await prisma.user.delete({ where: { id: userId } });
+  async delete(userId: string, tx: Tx = prisma) {
+    await tx.user.delete({ where: { id: userId } });
   },
 
   async verifyPassword(user: User, plainPassword: string) {
