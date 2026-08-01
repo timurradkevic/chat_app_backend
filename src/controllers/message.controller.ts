@@ -9,6 +9,7 @@ import {
   assertIsRoom,
   assertIsRoomId,
   assertIsUserInRoom,
+  getAuthUser,
 } from '../utils/checks.js';
 import { messageEmitter } from '../lib/messageEmmiter.js';
 
@@ -38,7 +39,7 @@ export const messageController = {
     res: Response,
     next: NextFunction,
   ) {
-    const { id } = req.user;
+    const { id } = getAuthUser(req);
     const { roomId } = req.params;
 
     assertIsRoomId(roomId);
@@ -59,7 +60,7 @@ export const messageController = {
     res: Response,
     next: NextFunction,
   ) {
-    const { id } = req.user;
+    const { id } = getAuthUser(req);
     const { messageId } = req.params;
 
     assertIsMessageId(messageId);
@@ -72,7 +73,7 @@ export const messageController = {
   },
 
   async create(req: Request, res: Response, next: NextFunction) {
-    const { id } = req.user;
+    const { id } = getAuthUser(req);
     const { messageData } = req.body;
 
     const verifiedData = {
@@ -96,7 +97,7 @@ export const messageController = {
     res: Response,
     next: NextFunction,
   ) {
-    const { id } = req.user;
+    const { id } = getAuthUser(req);
     const { messageId } = req.params;
 
     assertIsMessageId(messageId);
@@ -129,7 +130,7 @@ export const messageController = {
     res: Response,
     next: NextFunction,
   ) {
-    const { id } = req.user;
+    const { id } = getAuthUser(req);
     const { messageId } = req.params;
     const { messageData } = req.body;
 

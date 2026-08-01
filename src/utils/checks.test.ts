@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import type { Request } from 'express';
 import {
   assertIsOwner,
   assertIsOwnerTryingToLeave,
@@ -13,6 +14,7 @@ import {
   ConflictError,
   UnauthorizedError,
   GoneError,
+  getAuthUser,
 } from './checks.js';
 import { roomService } from '../services/room.service.js';
 import { userService } from '../services/user.service.js';
@@ -279,6 +281,39 @@ describe('auth-related checks', () => {
       await expect(
         assertIsValidToken('raw-token', 'ACTIVATION'),
       ).resolves.toEqual(token);
+    });
+  });
+
+  describe('getAuthUser', () => {
+    it('throws UnauthorizedError when req.user is undefined', () => {
+      const req = { user: undefined } as unknown as Request<
+        unknown,
+        unknown,
+        unknown,
+        unknown,
+        Record<string, unknown>
+      >;
+
+      expect(() => getAuthUser(req)).toThrow(UnauthorizedError);
+      expect(() => getAuthUser(req)).toThrow('User not authenticated');
+    });
+
+    it('returns req.user unchanged when it is set', () => {
+      const user = {
+        id: 'user-1',
+        email: 'user@example.com',
+        name: 'Test User',
+        sessionId: 'session-1',
+      };
+      const req = { user } as unknown as Request<
+        unknown,
+        unknown,
+        unknown,
+        unknown,
+        Record<string, unknown>
+      >;
+
+      expect(getAuthUser(req)).toBe(user);
     });
   });
 });

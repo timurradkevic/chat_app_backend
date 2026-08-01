@@ -6,6 +6,7 @@ import type { User } from '../generated/prisma/client.js';
 import { tokenService } from '../services/token.service.js';
 import { googleService } from './google.js';
 import { refreshTokenService } from '../services/refreshToken.service.js';
+import type { Request } from 'express';
 
 export class ForbiddenError extends Error {
   constructor(message = 'Forbidden') {
@@ -46,6 +47,25 @@ export class GoneError extends Error {
     super(message);
     this.name = 'GoneError';
   }
+}
+
+/**
+ * Requires an authenticated user. Throws UnauthorizedError if req.user is not set.
+ * For endpoints where auth is optional, do NOT use this — check req.user directly
+ * (typed as Request['user'] | undefined) and handle both branches.
+ */
+export function getAuthUser<
+  P = unknown,
+  ResBody = unknown,
+  ReqBody = unknown,
+  ReqQuery = unknown,
+  Locals extends Record<string, unknown> = Record<string, unknown>,
+>(req: Request<P, ResBody, ReqBody, ReqQuery, Locals>) {
+  if (!req.user) {
+    throw new UnauthorizedError('User not authenticated');
+  }
+
+  return req.user;
 }
 
 export async function assertIsOwner(

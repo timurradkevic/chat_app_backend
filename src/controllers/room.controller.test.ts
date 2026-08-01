@@ -48,6 +48,7 @@ vi.mock('../utils/checks.js', () => ({
   assertIsUserId: vi.fn(),
   assertIsUserInRoom: vi.fn(),
   assertIsUserIsNotInRoom: vi.fn(),
+  getAuthUser: vi.fn((req: Request) => req.user),
 }));
 
 function makeRoom(overrides: Partial<Room> = {}): Room {

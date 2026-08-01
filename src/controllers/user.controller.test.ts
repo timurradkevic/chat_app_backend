@@ -60,6 +60,7 @@ vi.mock('../utils/checks.js', () => ({
   assertIsValidToken: vi.fn(),
   assertIsValidGoogleToken: vi.fn(),
   assertIsEmailVerified: vi.fn(),
+  getAuthUser: vi.fn((req: Request) => req.user),
 }));
 
 vi.mock('../services/token.service.js', () => ({

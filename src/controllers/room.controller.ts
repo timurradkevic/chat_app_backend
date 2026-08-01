@@ -14,6 +14,7 @@ import {
   assertIsUserId,
   assertIsUserInRoom,
   assertIsUserIsNotInRoom,
+  getAuthUser,
 } from '../utils/checks.js';
 
 const RoomData = z.object({
@@ -70,9 +71,10 @@ export const roomController = {
     res: Response,
     next: NextFunction,
   ) {
-    const { id } = req.user;
+    const { id } = getAuthUser(req);
 
-    const cursor = req.query.cursor;
+    const cursor =
+      typeof req.query.cursor === 'string' ? req.query.cursor : undefined;
     const limit = Math.min(Number(req.query.limit) || 20, 100);
 
     const rooms = await roomService.getAllByUserId(id, cursor, limit);
@@ -85,7 +87,7 @@ export const roomController = {
     res: Response,
     next: NextFunction,
   ) {
-    const { id } = req.user;
+    const { id } = getAuthUser(req);
     const { roomId } = req.params;
 
     assertIsRoomId(roomId);
@@ -100,7 +102,7 @@ export const roomController = {
   },
 
   async create(req: Request, res: Response, next: NextFunction) {
-    const { id } = req.user;
+    const { id } = getAuthUser(req);
     const { roomData } = req.body;
 
     const verifiedData = RoomData.parse(roomData);
@@ -115,7 +117,7 @@ export const roomController = {
     res: Response,
     next: NextFunction,
   ) {
-    const { id } = req.user;
+    const { id } = getAuthUser(req);
     const { roomId } = req.params;
 
     assertIsRoomId(roomId);
@@ -134,7 +136,7 @@ export const roomController = {
     res: Response,
     next: NextFunction,
   ) {
-    const { id } = req.user;
+    const { id } = getAuthUser(req);
     const { roomId } = req.params;
     const { roomData } = req.body;
 
@@ -159,7 +161,7 @@ export const roomController = {
     res: Response,
     next: NextFunction,
   ) {
-    const { id } = req.user;
+    const { id } = getAuthUser(req);
     const { userId } = AddUserBody.parse(req.body);
     const { roomId } = req.params;
 
@@ -183,7 +185,7 @@ export const roomController = {
     res: Response,
     next: NextFunction,
   ) {
-    const { id } = req.user;
+    const { id } = getAuthUser(req);
     const { roomId, userId } = req.params;
 
     assertIsRoomId(roomId);
@@ -208,7 +210,7 @@ export const roomController = {
     res: Response,
     next: NextFunction,
   ) {
-    const { id } = req.user;
+    const { id } = getAuthUser(req);
     const { roomId } = req.params;
 
     assertIsRoomId(roomId);
@@ -231,7 +233,7 @@ export const roomController = {
     res: Response,
     next: NextFunction,
   ) {
-    const { id } = req.user;
+    const { id } = getAuthUser(req);
     const { roomId, userId } = req.params;
     const { role } = changeMemberRoleBody.parse(req.body);
 
@@ -260,7 +262,7 @@ export const roomController = {
     res: Response,
     next: NextFunction,
   ) {
-    const { id } = req.user;
+    const { id } = getAuthUser(req);
     const { roomId, userId } = req.params;
 
     assertIsRoomId(roomId);

@@ -38,6 +38,7 @@ vi.mock('../utils/checks.js', () => ({
   assertIsRoom: vi.fn(),
   assertIsRoomId: vi.fn(),
   assertIsUserInRoom: vi.fn(),
+  getAuthUser: vi.fn((req: Request) => req.user),
 }));
 
 function makeMessage(overrides: Partial<Message> = {}): Message {
