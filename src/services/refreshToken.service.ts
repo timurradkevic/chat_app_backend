@@ -37,13 +37,6 @@ export const refreshTokenService = {
     const expiredTime = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 days
     const rawToken = randomBytes(32).toString('hex');
     const tokenHash = createHash('sha256').update(rawToken).digest('hex');
-    // A fresh login starts its own family, identified by an independently
-    // generated random id — not derived from the token hash. Family and
-    // token identity are separate concepts; deriving one from the other
-    // (as this used to do) made them coincidentally equal on first login,
-    // which was easy to misread as meaningful and would silently break if
-    // the token-hashing algorithm ever changed independently of family
-    // generation.
     const finalFamilyId = familyId ?? randomBytes(16).toString('hex');
 
     const deviceLabel = meta?.userAgent?.substring(0, 255) ?? 'Unknown device';
@@ -65,6 +58,83 @@ export const refreshTokenService = {
 
   async verifyAndRotate(rawToken: string) {
     const tokenHash = createHash('sha256').update(rawToken).digest('hex');
+    const now = new Date();
+
+    // Atomic "claim" step: try to flip usedAt from null -> now in a single
+    // DB-level conditional UPDATE. The WHERE clause (usedAt: null,
+    // expiredTime > now) is evaluated and applied atomically by the
+    // database, so if two concurrent requests race on the same raw token,
+    // only one of them can possibly get count === 1. This closes the
+    // read-then-write window that existed with findUnique + separate
+    // usedAt check: there is no longer a gap between "check usedAt" and
+    // "set usedAt" where two requests could both see usedAt === null.
+    const claim = await prisma.refreshToken.updateMany({
+      where: {
+        tokenHash,
+        usedAt: null,
+        expiredTime: { gt: now },
+      },
+      data: {
+        usedAt: now,
+        lastUsedAt: now,
+      },
+    });
+
+    if (claim.count === 1) {
+      // We won the race. Re-fetch the row to get the fields needed to
+      // mint the child token. This second read is safe: usedAt is already
+      // committed as "ours", so no other concurrent call can claim this
+      // same row again.
+      const token = await prisma.refreshToken.findUnique({
+        where: { tokenHash },
+      });
+
+      // Defensive: should not happen (we just updated it), but keeps
+      // TypeScript happy and guards against a concurrent hard-delete.
+      if (!token) {
+        return null;
+      }
+
+      const newRawToken = randomBytes(32).toString('hex');
+      const newTokenHash = createHash('sha256')
+        .update(newRawToken)
+        .digest('hex');
+      const newExpiredTime = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 days
+
+      await prisma.refreshToken.create({
+        data: {
+          userId: token.userId,
+          tokenHash: newTokenHash,
+          familyId: token.familyId,
+          expiredTime: newExpiredTime,
+          userAgent: token.userAgent,
+          ipAddress: token.ipAddress,
+          deviceLabel: token.deviceLabel,
+        },
+      });
+
+      const result: CachedRotationResult = {
+        rawToken: newRawToken,
+        userId: token.userId,
+        familyId: token.familyId,
+      };
+
+      // Cache the rotation result for the grace window so a duplicate
+      // request replaying the same (now-spent) raw token gets back the
+      // same child token instead of triggering a fresh rotation.
+      await redis.set(
+        retryCacheKey(token.tokenHash),
+        JSON.stringify(result),
+        'EX',
+        REUSE_GRACE_PERIOD_SECONDS,
+      );
+
+      return result;
+    }
+
+    // claim.count === 0: either the token doesn't exist, is already used,
+    // or is expired. Figure out which by reading the row (read-only, no
+    // race-sensitive decision is made off of this read).
     const token = await prisma.refreshToken.findUnique({
       where: { tokenHash },
     });
@@ -84,20 +154,16 @@ export const refreshTokenService = {
         return 'reused' as const;
       }
 
-      // Within the grace period: this is expected to be a harmless retry
-      // (e.g. a duplicate request from the client), NOT a license to mint
-      // another independent child token. Return the exact same child token
-      // that was already issued the first time this raw token was rotated,
-      // and do nothing else — no new DB row, no usedAt reset. That keeps
-      // the grace window from being extendable by repeated replay, and
-      // means an attacker replaying a stolen-but-already-used token can
-      // never get a child of their own.
+      // Within the grace period: expected to be a harmless retry (e.g. a
+      // duplicate request from the client), NOT a license to mint another
+      // independent child token. Return the exact same child token that
+      // was already issued the first time this raw token was rotated.
       const cachedRaw = await redis.get(retryCacheKey(token.tokenHash));
 
       if (!cachedRaw) {
         // No cached rotation result for this token within the grace
-        // window — we can't safely treat this as a legitimate retry, so
-        // fail closed and revoke the family, same as a reuse outside the
+        // window — can't safely treat this as a legitimate retry, so fail
+        // closed and revoke the family, same as a reuse outside the
         // window.
         await prisma.refreshToken.deleteMany({
           where: { familyId: token.familyId },
@@ -110,49 +176,9 @@ export const refreshTokenService = {
       return cached;
     }
 
-    if (token.expiredTime < new Date()) {
-      return 'expired' as const;
-    }
-
-    const newRawToken = randomBytes(32).toString('hex');
-    const newTokenHash = createHash('sha256').update(newRawToken).digest('hex');
-    const newExpiredTime = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 days
-
-    await prisma.$transaction([
-      prisma.refreshToken.update({
-        where: { id: token.id },
-        data: { usedAt: new Date(), lastUsedAt: new Date() },
-      }),
-      prisma.refreshToken.create({
-        data: {
-          userId: token.userId,
-          tokenHash: newTokenHash,
-          familyId: token.familyId,
-          expiredTime: newExpiredTime,
-          userAgent: token.userAgent,
-          ipAddress: token.ipAddress,
-          deviceLabel: token.deviceLabel,
-        },
-      }),
-    ]);
-
-    const result: CachedRotationResult = {
-      rawToken: newRawToken,
-      userId: token.userId,
-      familyId: token.familyId,
-    };
-
-    // Cache the rotation result for the grace window so a duplicate
-    // request replaying the same (now-spent) raw token gets back the same
-    // child token instead of triggering a fresh rotation.
-    await redis.set(
-      retryCacheKey(token.tokenHash),
-      JSON.stringify(result),
-      'EX',
-      REUSE_GRACE_PERIOD_SECONDS,
-    );
-
-    return result;
+    // usedAt is null but the atomic claim still failed with count === 0 ->
+    // the only remaining reason is expiredTime <= now.
+    return 'expired' as const;
   },
 
   async findByRawToken(rawToken: string) {

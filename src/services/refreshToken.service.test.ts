@@ -24,12 +24,14 @@ vi.mock('../lib/prisma.js', () => ({
       create: vi.fn(),
       findUnique: vi.fn(),
       update: vi.fn(),
+      updateMany: vi.fn(),
       delete: vi.fn(),
       deleteMany: vi.fn(),
       findMany: vi.fn(),
     },
-    // Rotation marks the old row used and creates the new row inside one
-    // transaction, so both must be awaited together here too.
+    // No longer used by verifyAndRotate (the read-then-write step was
+    // replaced by an atomic updateMany), but kept in the mock in case
+    // other paths still rely on it.
     $transaction: vi.fn(async (ops: Promise<unknown>[]) => Promise.all(ops)),
   },
 }));
@@ -130,6 +132,44 @@ describe('refreshTokenService', () => {
       Object.assign(row, data);
       return row;
     }) as unknown as typeof prisma.refreshToken.update);
+
+    // Mirrors the real DB semantics that verifyAndRotate now relies on for
+    // its atomic "claim" step: only rows matching tokenHash AND usedAt
+    // null AND expiredTime > now get updated, and the returned count
+    // tells the caller whether it won the race. Everything else (already
+    // used, expired, or nonexistent) yields count: 0, same as a real
+    // conditional UPDATE would touch zero rows.
+    vi.mocked(prisma.refreshToken.updateMany).mockImplementation((async ({
+      where,
+      data,
+    }: {
+      where: {
+        tokenHash?: string;
+        usedAt?: null;
+        expiredTime?: { gt?: Date };
+      };
+      data: Partial<RefreshToken>;
+    }) => {
+      const matches = rows.filter((r) => {
+        if (where.tokenHash !== undefined && r.tokenHash !== where.tokenHash) {
+          return false;
+        }
+        if (where.usedAt === null && r.usedAt !== null) {
+          return false;
+        }
+        const gt = where.expiredTime?.gt;
+        if (gt !== undefined && !(r.expiredTime > gt)) {
+          return false;
+        }
+        return true;
+      });
+
+      for (const row of matches) {
+        Object.assign(row, data);
+      }
+
+      return { count: matches.length };
+    }) as unknown as typeof prisma.refreshToken.updateMany);
 
     vi.mocked(prisma.refreshToken.delete).mockImplementation((async ({
       where,
@@ -258,8 +298,11 @@ describe('refreshTokenService', () => {
       const result = await refreshTokenService.verifyAndRotate(rawToken);
 
       expect(result).toBe('expired');
-      // Expired token must not be rotated/consumed.
-      expect(rows.find((r) => r.tokenHash === tokenHash)).toBeDefined();
+      // Expired token must not be rotated/consumed, and must not have been
+      // claimed (usedAt must still be null) by the atomic updateMany step.
+      const stillThere = rows.find((r) => r.tokenHash === tokenHash);
+      expect(stillThere).toBeDefined();
+      expect(stillThere?.usedAt).toBeNull();
     });
 
     it('returns null for a token that does not exist', async () => {
