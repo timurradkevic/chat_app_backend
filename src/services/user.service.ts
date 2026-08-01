@@ -10,6 +10,7 @@ type UpdatedUserData = Pick<User, 'name' | 'email'> &
 type Tx = Prisma.TransactionClient | typeof prisma;
 
 const DEFAULT_LIMIT = 10;
+const SALT_ROUNDS = 12;
 
 export const userService = {
   async getOneById(userId: string) {
@@ -34,7 +35,7 @@ export const userService = {
 
   async create(userData: UserData) {
     const hashPass = userData.password
-      ? await bcrypt.hash(userData.password, 10)
+      ? await bcrypt.hash(userData.password, SALT_ROUNDS)
       : null;
     const user = await prisma.user.create({
       data: { email: userData.email, name: userData.name, password: hashPass },
@@ -67,7 +68,7 @@ export const userService = {
   },
 
   async updatePassword(userId: string, newPassword: string, tx: Tx = prisma) {
-    const hashPass = await bcrypt.hash(newPassword, 10);
+    const hashPass = await bcrypt.hash(newPassword, SALT_ROUNDS);
 
     await tx.user.update({
       where: { id: userId },
