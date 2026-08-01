@@ -137,6 +137,11 @@ describe('roomService', () => {
   describe('transferOwnership', () => {
     it('promotes the new owner to OWNER and demotes the previous owner to ADMIN', async () => {
       const tx = {
+        room: {
+          update: vi
+            .fn<TransactionClient['room']['update']>()
+            .mockResolvedValue(makeRoom({ ownerId: 'new-owner' })),
+        },
         roomMember: {
           update: vi
             .fn<TransactionClient['roomMember']['update']>()
@@ -157,6 +162,32 @@ describe('roomService', () => {
       expect(tx.roomMember.update).toHaveBeenNthCalledWith(2, {
         where: { userId_roomId: { userId: 'old-owner', roomId: 'room-1' } },
         data: { role: Role.ADMIN },
+      });
+    });
+
+    it('updates the room ownerId to the new owner', async () => {
+      const tx = {
+        room: {
+          update: vi
+            .fn<TransactionClient['room']['update']>()
+            .mockResolvedValue(makeRoom({ ownerId: 'new-owner' })),
+        },
+        roomMember: {
+          update: vi
+            .fn<TransactionClient['roomMember']['update']>()
+            .mockResolvedValue(makeRoomMember({ role: Role.OWNER })),
+        },
+      };
+
+      vi.mocked(prisma.$transaction).mockImplementation(async (cb) =>
+        cb(tx as unknown as TransactionClient),
+      );
+
+      await roomService.transferOwnership('room-1', 'old-owner', 'new-owner');
+
+      expect(tx.room.update).toHaveBeenCalledWith({
+        where: { id: 'room-1' },
+        data: { ownerId: 'new-owner' },
       });
     });
   });

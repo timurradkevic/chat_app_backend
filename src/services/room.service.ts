@@ -173,6 +173,10 @@ export const roomService = {
         where: { userId_roomId: { userId: fromUserId, roomId } },
         data: { role: Role.ADMIN },
       });
+      await tx.room.update({
+        where: { id: roomId },
+        data: { ownerId: toUserId },
+      });
 
       return updatedRoomOwner;
     });
