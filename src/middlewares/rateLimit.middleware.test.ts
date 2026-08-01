@@ -484,6 +484,83 @@ describe('rateLimit.middleware', () => {
       ).toBe(true);
     });
 
+    // Regression test: before normalizing, "case-variant@example.com" and
+    // "Case-Variant@Example.com" hashed to different keys, so replaying the
+    // same request with a different letter case reset the counter and
+    // bypassed the limit entirely.
+    // NOTE: the key is the (normalized) email itself, not the IP — and the
+    // mock `counters` Map above is shared for the whole test file (only
+    // call history is cleared per test), so these emails must be unique
+    // across every test in this file or they'll inherit stale counts.
+    it('activationEmailRateLimitMiddleware treats case/whitespace variants of the same email as one bucket', async () => {
+      const ip = '203.0.113.40';
+      const variants = [
+        'case-variant-a@example.com',
+        'Case-Variant-A@Example.com',
+        'CASE-VARIANT-A@EXAMPLE.COM',
+      ];
+
+      for (const email of variants) {
+        const req = makeReq({
+          ip,
+          body: { resendActivationData: { email } },
+        });
+        const result = await runMiddleware(
+          mod.activationEmailRateLimitMiddleware,
+          req,
+        );
+        expect(result.blocked).toBe(false);
+      }
+
+      // The limit is 3; all 3 variants above must have counted against the
+      // same bucket, so a 4th request (in any casing, with stray whitespace)
+      // is blocked.
+      const fourthReq = makeReq({
+        ip,
+        body: {
+          resendActivationData: { email: '  case-Variant-a@Example.com  ' },
+        },
+      });
+      const fourth = await runMiddleware(
+        mod.activationEmailRateLimitMiddleware,
+        fourthReq,
+      );
+      expect(fourth.blocked).toBe(true);
+    });
+
+    it('passwordResetEmailRateLimitMiddleware treats case/whitespace variants of the same email as one bucket', async () => {
+      const ip = '203.0.113.41';
+      const variants = [
+        'case-variant-b@example.com',
+        'Case-Variant-B@Example.com',
+        'CASE-VARIANT-B@EXAMPLE.COM',
+      ];
+
+      for (const email of variants) {
+        const req = makeReq({
+          ip,
+          body: { resetPasswordData: { email } },
+        });
+        const result = await runMiddleware(
+          mod.passwordResetEmailRateLimitMiddleware,
+          req,
+        );
+        expect(result.blocked).toBe(false);
+      }
+
+      const fourthReq = makeReq({
+        ip,
+        body: {
+          resetPasswordData: { email: '  Case-variant-B@example.com  ' },
+        },
+      });
+      const fourth = await runMiddleware(
+        mod.passwordResetEmailRateLimitMiddleware,
+        fourthReq,
+      );
+      expect(fourth.blocked).toBe(true);
+    });
+
     it('two different emails from the same IP are tracked independently', async () => {
       const ip = '203.0.113.30';
 

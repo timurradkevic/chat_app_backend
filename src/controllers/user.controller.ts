@@ -42,7 +42,7 @@ const PasswordSchema = z
   .regex(/[0-9]/, 'Password must contain a digit');
 
 const RegisterData = z.object({
-  email: z.email(),
+  email: z.string().trim().toLowerCase().pipe(z.email()),
   name: z
     .string()
     .min(2, 'Name cannot be empty')
@@ -55,7 +55,7 @@ const UpdatedUserData = z.object({
     .string()
     .min(2, 'Name cannot be empty')
     .max(100, 'Name cannot exceed 100 characters'),
-  email: z.email(),
+  email: z.string().trim().toLowerCase().pipe(z.email()),
 });
 
 const PasswordData = z.object({
@@ -64,7 +64,7 @@ const PasswordData = z.object({
 });
 
 const LoginData = z.object({
-  email: z.email(),
+  email: z.string().trim().toLowerCase().pipe(z.email()),
   password: z.string(),
 });
 
@@ -75,18 +75,18 @@ const GoogleLoginData = z.object({
 });
 
 const GoogleTokenData = z.object({
-  email: z.email(),
+  email: z.string().trim().toLowerCase().pipe(z.email()),
   sub: z.string(),
   name: z.string(),
   email_verified: z.boolean(),
 });
 
 const ResendActivationData = z.object({
-  email: z.email(),
+  email: z.string().trim().toLowerCase().pipe(z.email()),
 });
 
 const RequestPasswordResetData = z.object({
-  email: z.email(),
+  email: z.string().trim().toLowerCase().pipe(z.email()),
 });
 
 const ConfirmPasswordResetData = z.object({

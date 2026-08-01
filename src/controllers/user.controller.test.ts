@@ -18,6 +18,7 @@ import {
   assertIsValidGoogleToken,
   assertIsEmailVerified,
   assertIsCorrectPassword,
+  assertIsUniqueEmail,
   assertHasNoOwnedRooms,
 } from '../utils/checks.js';
 import type { User } from '../generated/prisma/client.js';
@@ -52,6 +53,7 @@ vi.mock('../services/user.service.js', () => ({
     linkGoogleIdWithUnconfirmedEmail: vi.fn(),
     linkGoogleIdWithConfirmedEmail: vi.fn(),
     createFromGoogle: vi.fn(),
+    create: vi.fn(),
     update: vi.fn(),
     delete: vi.fn(),
   },
@@ -73,6 +75,7 @@ vi.mock('../utils/checks.js', () => ({
 
 vi.mock('../services/token.service.js', () => ({
   tokenService: {
+    create: vi.fn(),
     reissue: vi.fn(),
     invalidate: vi.fn(),
   },
@@ -141,6 +144,81 @@ describe('userController', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     next = vi.fn();
+  });
+
+  describe('register', () => {
+    it('registers the user, creates an activation token, and emails it', async () => {
+      const createdUser = makeUser({
+        id: 'user-1',
+        email: 'user@example.com',
+        confirmedEmail: false,
+      });
+      vi.mocked(assertIsUniqueEmail).mockResolvedValue(undefined as never);
+      vi.mocked(userService.create).mockResolvedValue(createdUser);
+      vi.mocked(tokenService.create).mockResolvedValue('raw-activation-token');
+
+      const req = makeReq({
+        body: {
+          registerData: {
+            email: 'user@example.com',
+            name: 'Test User',
+            password: 'Password1',
+          },
+        },
+      });
+      const res = makeRes();
+
+      await userController.register(req, res, next);
+
+      expect(userService.create).toHaveBeenCalledWith({
+        email: 'user@example.com',
+        name: 'Test User',
+        password: 'Password1',
+      });
+      expect(mailer.sendActivationEmail).toHaveBeenCalledWith(
+        'user@example.com',
+        'raw-activation-token',
+      );
+      expect(res.status).toHaveBeenCalledWith(201);
+      const sent = vi.mocked(res.send).mock.calls[0]?.[0];
+      expect(sent).not.toHaveProperty('password');
+    });
+
+    // Regression test: without normalizing the email, "User@Example.com" and
+    // "user@example.com" would be treated as two different accounts (the
+    // uniqueness check and the stored record would silently diverge from
+    // what the user typed elsewhere, e.g. at login).
+    it('normalizes the email to lowercase and trimmed before checking uniqueness and creating the user', async () => {
+      const createdUser = makeUser({
+        id: 'user-1',
+        email: 'user@example.com',
+      });
+      vi.mocked(assertIsUniqueEmail).mockResolvedValue(undefined as never);
+      vi.mocked(userService.create).mockResolvedValue(createdUser);
+      vi.mocked(tokenService.create).mockResolvedValue('raw-activation-token');
+
+      const req = makeReq({
+        body: {
+          registerData: {
+            email: '  User@Example.com  ',
+            name: 'Test User',
+            password: 'Password1',
+          },
+        },
+      });
+      const res = makeRes();
+
+      await userController.register(req, res, next);
+
+      expect(assertIsUniqueEmail).toHaveBeenCalledWith('user@example.com');
+      expect(userService.create).toHaveBeenCalledWith(
+        expect.objectContaining({ email: 'user@example.com' }),
+      );
+      expect(mailer.sendActivationEmail).toHaveBeenCalledWith(
+        'user@example.com',
+        'raw-activation-token',
+      );
+    });
   });
 
   describe('getMe', () => {
@@ -220,6 +298,36 @@ describe('userController', () => {
         'new@example.com',
         'raw-activation-token',
       );
+    });
+
+    // Regression test: comparing the raw (non-normalized) input against
+    // currentUser.email would treat "USER@Example.com" as a changed email
+    // even when it's the same address as stored, wrongly forcing
+    // re-confirmation and firing an activation email.
+    it('does not treat a case/whitespace variant of the current email as a change', async () => {
+      const currentUser = makeUser({ id: 'user-1', email: 'same@example.com' });
+      const req = makeReq({
+        user: { ...currentUser, sessionId: 'session-1' },
+        body: {
+          userData: { name: 'New Name', email: '  Same@Example.com  ' },
+        },
+      });
+      const res = makeRes();
+      const updatedUser = makeUser({
+        id: 'user-1',
+        name: 'New Name',
+        email: 'same@example.com',
+      });
+      vi.mocked(userService.update).mockResolvedValue(updatedUser);
+
+      await userController.update(req, res, next);
+
+      expect(assertIsUniqueEmail).not.toHaveBeenCalled();
+      expect(userService.update).toHaveBeenCalledWith('user-1', {
+        name: 'New Name',
+        email: 'same@example.com',
+      });
+      expect(mailer.sendActivationEmail).not.toHaveBeenCalled();
     });
   });
 
@@ -370,6 +478,37 @@ describe('userController', () => {
         accessToken: 'signed-access-token',
         refreshToken: 'raw-refresh-token',
       });
+    });
+
+    // Regression test: without normalizing the email here, a login attempt
+    // with a different letter case than the one used at registration would
+    // simply fail to find the user, even though it's the same address.
+    it('normalizes the email to lowercase and trimmed before authenticating', async () => {
+      const user = makeUser({ id: 'user-1', tokenVersion: 0 });
+      vi.mocked(assertIsCorrectEmailAndPassword).mockResolvedValue(user);
+      vi.mocked(assertIsConfirmedEmail).mockReturnValue(undefined);
+      vi.mocked(refreshTokenService.create).mockResolvedValue({
+        rawToken: 'raw-refresh-token',
+        familyId: 'family-1',
+      });
+      vi.mocked(jwtService.sign).mockReturnValue('signed-access-token');
+
+      const req = makeReq({
+        body: {
+          loginData: {
+            email: '  User@Example.com  ',
+            password: 'Password1',
+          },
+        },
+      });
+      const res = makeRes();
+
+      await userController.login(req, res, next);
+
+      expect(assertIsCorrectEmailAndPassword).toHaveBeenCalledWith(
+        'user@example.com',
+        'Password1',
+      );
     });
 
     it('throws before a refresh token is created when the email is not confirmed', async () => {
@@ -649,6 +788,50 @@ describe('userController', () => {
       );
       expect(logger.warn).not.toHaveBeenCalled();
     });
+
+    // Regression test: Google's payload isn't guaranteed to come back
+    // lowercase; without normalizing it here, the lookup could miss an
+    // existing account stored as "user@example.com".
+    it('normalizes the email from the Google payload before looking up an existing account', async () => {
+      const existingUser = makeUser({
+        id: 'user-3',
+        email: 'user@example.com',
+        confirmedEmail: true,
+        googleId: null,
+      });
+
+      const googleTokenPayload = {
+        email: 'User@Example.com',
+        sub: 'google-sub-3',
+        name: 'Test User',
+        email_verified: true,
+        iss: 'test-issuer',
+        aud: 'test-audience',
+        iat: 1,
+        exp: 2,
+      };
+
+      vi.mocked(assertIsValidGoogleToken).mockResolvedValue(googleTokenPayload);
+      vi.mocked(assertIsEmailVerified).mockReturnValue(undefined);
+      vi.mocked(userService.getOneByGoogleId).mockResolvedValue(null);
+      vi.mocked(userService.getOneByEmail).mockResolvedValue(existingUser);
+      vi.mocked(refreshTokenService.create).mockResolvedValue({
+        rawToken: 'raw-refresh-token',
+        familyId: 'family-3',
+      });
+      vi.mocked(jwtService.sign).mockReturnValue('signed-access-token');
+
+      const req = makeReq({
+        body: { googleLoginData: { idToken: 'raw-id-token' } },
+      });
+      const res = makeRes();
+
+      await userController.loginWithGoogle(req, res, next);
+
+      expect(userService.getOneByEmail).toHaveBeenCalledWith(
+        'user@example.com',
+      );
+    });
   });
 
   describe('refresh', () => {
@@ -762,6 +945,30 @@ describe('userController', () => {
         'raw-reset-token',
       );
       expect(res.sendStatus).toHaveBeenCalledWith(204);
+    });
+
+    // Regression test: an unnormalized lookup would treat "User@Example.com"
+    // as a different account than the one stored as "user@example.com",
+    // silently swallowing the request into the "account not found" branch.
+    it('normalizes the email to lowercase and trimmed before looking up the account', async () => {
+      const user = makeUser({ id: 'user-1', email: 'user@example.com' });
+      vi.mocked(userService.getOneByEmail).mockResolvedValue(user);
+      vi.mocked(tokenService.reissue).mockResolvedValue('raw-reset-token');
+
+      const req = makeReq({
+        body: { resetPasswordData: { email: '  User@Example.com  ' } },
+      });
+      const res = makeRes();
+
+      await userController.requestPasswordReset(req, res, next);
+
+      expect(userService.getOneByEmail).toHaveBeenCalledWith(
+        'user@example.com',
+      );
+      expect(mailer.sendResetPasswordEmail).toHaveBeenCalledWith(
+        'user@example.com',
+        'raw-reset-token',
+      );
     });
 
     it('sends 204 without reissuing a token or emailing when the account does not exist', async () => {
@@ -916,6 +1123,34 @@ describe('userController', () => {
         'raw-activation-token',
       );
       expect(res.sendStatus).toHaveBeenCalledWith(204);
+    });
+
+    // Regression test: an unnormalized lookup would treat "User@Example.com"
+    // as a different account than the one stored as "user@example.com",
+    // silently swallowing the resend into the "does nothing" 204 branch.
+    it('normalizes the email to lowercase and trimmed before looking up the account', async () => {
+      const user = makeUser({
+        id: 'user-1',
+        email: 'user@example.com',
+        confirmedEmail: false,
+      });
+      vi.mocked(userService.getOneByEmail).mockResolvedValue(user);
+      vi.mocked(tokenService.reissue).mockResolvedValue('raw-activation-token');
+
+      const req = makeReq({
+        body: { resendActivationData: { email: '  User@Example.com  ' } },
+      });
+      const res = makeRes();
+
+      await userController.resendActivation(req, res, next);
+
+      expect(userService.getOneByEmail).toHaveBeenCalledWith(
+        'user@example.com',
+      );
+      expect(mailer.sendActivationEmail).toHaveBeenCalledWith(
+        'user@example.com',
+        'raw-activation-token',
+      );
     });
 
     it('does nothing but respond 204 when the account does not exist', async () => {

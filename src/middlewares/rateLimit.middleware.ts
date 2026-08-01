@@ -51,8 +51,11 @@ export const activationIpRateLimitMiddleware = rateLimit({
 export const activationEmailRateLimitMiddleware = rateLimit({
   windowMs: 24 * 60 * 60 * 1000, // 24 hours
   limit: 3, // Limit each email to 3 requests per `window` (here, per 24 hours).
+  // Normalized the same way the controller's Zod schema normalizes it, so a
+  // request can't dodge the limit by varying the letter case of the email.
   keyGenerator: (req: Request) =>
-    req.body?.resendActivationData?.email ?? ipKeyGenerator(req.ip ?? ''),
+    req.body?.resendActivationData?.email?.trim().toLowerCase() ??
+    ipKeyGenerator(req.ip ?? ''),
 
   store: createRedisStore(),
 
@@ -74,8 +77,11 @@ export const passwordResetIpRateLimitMiddleware = rateLimit({
 export const passwordResetEmailRateLimitMiddleware = rateLimit({
   windowMs: 24 * 60 * 60 * 1000, // 24 hours
   limit: 3, // Limit each email to 3 reset requests per 24 hours.
+  // Normalized the same way the controller's Zod schema normalizes it, so a
+  // request can't dodge the limit by varying the letter case of the email.
   keyGenerator: (req: Request) =>
-    req.body?.resetPasswordData?.email ?? ipKeyGenerator(req.ip ?? ''),
+    req.body?.resetPasswordData?.email?.trim().toLowerCase() ??
+    ipKeyGenerator(req.ip ?? ''),
 
   store: createRedisStore(),
 
