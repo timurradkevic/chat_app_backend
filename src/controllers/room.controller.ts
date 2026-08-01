@@ -24,13 +24,6 @@ const RoomData = z.object({
     .max(100, 'Room name cannot exceed 100 characters'),
 });
 
-const UpdatedRoomData = z.object({
-  name: z
-    .string()
-    .min(2, 'Room name cannot be empty')
-    .max(100, 'Room name cannot exceed 100 characters'),
-});
-
 const AddUserBody = z.object({
   userId: z.string(),
 });
@@ -147,7 +140,7 @@ export const roomController = {
     await assertIsAdminOrOwner(id, roomId);
 
     const verifiedData = {
-      ...UpdatedRoomData.parse(roomData),
+      ...RoomData.parse(roomData),
       ownerId: room.ownerId,
     };
 
