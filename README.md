@@ -20,9 +20,13 @@ Backend for a chat application: rooms with member roles, real-time messaging ove
 - Email/password registration and login, Google registration and login
 - Email confirmation via a one-time token sent by mail (login is blocked until the email is confirmed)
 - Resending the confirmation email
+- Password reset via a one-time emailed token
+- Short-lived JWT access tokens (15 min) + long-lived rotating refresh tokens: every `/users/refresh` call issues a new refresh token and invalidates the old one; replaying an already-used refresh token is detected as reuse and revokes the entire session family
+- Session management: list active sessions (`GET /users/sessions`), revoke a single session, or log out everywhere (`/users/logout-all`) which also disconnects that user's open WebSocket connections
 - Rooms with roles (`OWNER`, `ADMIN`, `MEMBER`): adding/removing members, changing roles, transferring ownership, leaving a room
 - Messages: create, edit, delete, with real-time delivery only to the members of that specific room
 - Profile updates and password changes, account deletion
+- User search by name (cursor-paginated)
 
 ## Prerequisites
 
@@ -48,6 +52,7 @@ Copy `.env.example` to `.env` and fill in the values:
 | `CLIENT_HOST` | Frontend address — used to build links in activation emails |
 | `GOOGLE_CLIENT_ID` | The app's Client ID in Google Cloud Console |
 | `CORS_ORIGIN` | Comma-separated list of allowed CORS origins |
+| `TRUST_PROXY` | Set to `true` only when deployed behind a trusted reverse proxy (nginx, ALB, Cloudflare, etc.) that correctly sets `X-Forwarded-For`. Leave `false`/unset for local dev or direct exposure — otherwise the per-IP connection/rate limits become spoofable |
 
 ## Running Locally (without Docker)
 
@@ -104,18 +109,26 @@ prisma/
 
 ## API
 
-Base prefixes: `/users`, `/rooms`, `/messages`. Registration, login, Google login, and email confirmation endpoints are public; everything else requires an `Authorization: Bearer <token>` header.
+Base prefixes: `/users`, `/rooms`, `/messages`. Registration, login, Google login, refresh, logout, activation, and password-reset endpoints are public (they authenticate via credentials/tokens in the request body, not a bearer header); every other endpoint — including all of `/rooms` and `/messages` — requires an `Authorization: Bearer <accessToken>` header, marked below as *(auth required)*.
 
 ### Users
 - `POST /users/register` — register
-- `POST /users/login` — log in
+- `POST /users/login` — log in (returns an `accessToken` and a `refreshToken`)
 - `POST /users/google` — log in / register via Google
+- `POST /users/refresh` — exchange a refresh token for a new access + refresh token pair (rotates the refresh token; reused/expired tokens are rejected)
+- `POST /users/logout` — revoke a single refresh token
+- `POST /users/logout-all` — revoke every session for the current user and disconnect their active sockets *(auth required)*
 - `GET /users/activation/:activationToken` — confirm email
 - `POST /users/activation` — resend the confirmation email
-- `GET /users/me`, `PATCH /users/me`, `PATCH /users/me/password`, `DELETE /users/me`
+- `POST /users/password-reset` — request a password reset email
+- `POST /users/password-reset/:resetToken` — confirm the new password
+- `GET /users/me`, `PATCH /users/me`, `PATCH /users/me/password`, `DELETE /users/me` *(auth required)*
+- `GET /users/sessions` — list the current user's active sessions *(auth required)*
+- `DELETE /users/sessions/:sessionId` — revoke a specific session *(auth required)*
+- `GET /users/search?query=<name>&limit=<number>&cursor=<userId>` — search users by name *(auth required)*
 
-### Rooms
-- `GET /rooms?page=<number>&limit=<number>` — public list of all rooms (page pagination)
+### Rooms *(all endpoints require auth)*
+- `GET /rooms?page=<number>&limit=<number>` — list of all rooms, i.e. a public directory (page pagination)
 - `GET /rooms/mine?limit=<number>&cursor=<roomId>` — current user's rooms (cursor pagination)
 - `POST /rooms`, `PATCH /rooms/:roomId`, `DELETE /rooms/:roomId`
 - `GET /rooms/:roomId/members`, `POST /rooms/:roomId/members`
@@ -123,7 +136,7 @@ Base prefixes: `/users`, `/rooms`, `/messages`. Registration, login, Google logi
 - `PATCH /rooms/:roomId/members/:userId/role`
 - `PATCH /rooms/:roomId/members/:userId/transfer-ownership`
 
-### Messages
+### Messages *(all endpoints require auth)*
 - `GET /messages/room/:roomId?limit=<number>&cursor=<messageId>` — room messages (cursor pagination)
 - `GET /messages/:messageId`
 - `POST /messages`, `PUT /messages/:messageId`, `DELETE /messages/:messageId`
