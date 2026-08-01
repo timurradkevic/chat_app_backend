@@ -29,7 +29,7 @@ const AddUserBody = z.object({
 });
 
 const changeMemberRoleBody = z.object({
-  role: z.enum(Role),
+  role: z.enum([Role.ADMIN, Role.MEMBER]),
 });
 
 export const roomController = {

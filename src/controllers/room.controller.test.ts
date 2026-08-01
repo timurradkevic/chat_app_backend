@@ -16,6 +16,7 @@ import {
   assertIsUserIsNotInRoom,
 } from '../utils/checks.js';
 import type { Room, RoomMember } from '../generated/prisma/client.js';
+import { ZodError } from 'zod';
 
 vi.mock('../services/room.service.js', () => ({
   roomService: {
@@ -538,6 +539,27 @@ describe('roomController', () => {
         roomController.changeMemberRole(req, res, next),
       ).rejects.toThrow('Only the owner can assign the admin or owner role');
 
+      expect(roomService.changeMemberRole).not.toHaveBeenCalled();
+      expect(res.send).not.toHaveBeenCalled();
+    });
+
+    it("rejects a role change request with role: 'OWNER' at the schema level", async () => {
+      vi.mocked(assertIsUser).mockResolvedValue({} as never);
+      vi.mocked(assertIsRoom).mockResolvedValue(makeRoom());
+      vi.mocked(assertIsUserInRoom).mockResolvedValue(undefined);
+
+      const req = makeReq<Request<{ roomId: string; userId: string }>>({
+        user: { id: 'admin-1' },
+        params: { roomId: 'room-1', userId: 'user-1' },
+        body: { role: 'OWNER' },
+      });
+      const res = makeRes();
+
+      await expect(
+        roomController.changeMemberRole(req, res, next),
+      ).rejects.toThrow(ZodError);
+
+      expect(assertHasHigherRole).not.toHaveBeenCalled();
       expect(roomService.changeMemberRole).not.toHaveBeenCalled();
       expect(res.send).not.toHaveBeenCalled();
     });

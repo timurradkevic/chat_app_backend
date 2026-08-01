@@ -117,6 +117,12 @@ export async function assertHasHigherRole(
   const targetRole = await roomService.getMemberRole(targetId, roomId);
   const actorRole = await roomService.getMemberRole(actorId, roomId);
 
+  if (newRole === 'OWNER') {
+    throw new ForbiddenError(
+      'Use transfer ownership endpoint to assign the owner role',
+    );
+  }
+
   if (actorRole !== 'ADMIN' && actorRole !== 'OWNER') {
     throw new ForbiddenError(
       'Only admins or the owner can change member roles',
@@ -131,10 +137,8 @@ export async function assertHasHigherRole(
     throw new ForbiddenError("Only the owner can change an admin's role");
   }
 
-  if (actorRole !== 'OWNER' && (newRole === 'ADMIN' || newRole === 'OWNER')) {
-    throw new ForbiddenError(
-      'Only the owner can assign the admin or owner role',
-    );
+  if (actorRole !== 'OWNER' && newRole === 'ADMIN') {
+    throw new ForbiddenError('Only the owner can assign the admin role');
   }
 }
 

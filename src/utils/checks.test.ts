@@ -181,6 +181,16 @@ describe('room role checks', () => {
         assertHasHigherRole('actor', 'target', 'room-1'),
       ).resolves.toBeUndefined();
     });
+
+    it('forbids even the OWNER from assigning the OWNER role directly', async () => {
+      vi.mocked(roomService.getMemberRole)
+        .mockResolvedValueOnce(Role.MEMBER)
+        .mockResolvedValueOnce(Role.OWNER);
+
+      await expect(
+        assertHasHigherRole('actor', 'target', 'room-1', Role.OWNER),
+      ).rejects.toBeInstanceOf(ForbiddenError);
+    });
   });
 
   describe('assertHasNoOwnedRooms (blocks account deletion while owning rooms)', () => {
