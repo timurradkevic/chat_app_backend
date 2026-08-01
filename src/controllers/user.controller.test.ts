@@ -16,6 +16,8 @@ import {
   assertIsValidToken,
   assertIsValidGoogleToken,
   assertIsEmailVerified,
+  assertIsCorrectPassword,
+  assertHasNoOwnedRooms,
 } from '../utils/checks.js';
 import type { User } from '../generated/prisma/client.js';
 
@@ -49,6 +51,8 @@ vi.mock('../services/user.service.js', () => ({
     linkGoogleIdWithUnconfirmedEmail: vi.fn(),
     linkGoogleIdWithConfirmedEmail: vi.fn(),
     createFromGoogle: vi.fn(),
+    update: vi.fn(),
+    delete: vi.fn(),
   },
 }));
 
@@ -61,6 +65,9 @@ vi.mock('../utils/checks.js', () => ({
   assertIsValidGoogleToken: vi.fn(),
   assertIsEmailVerified: vi.fn(),
   getAuthUser: vi.fn((req: Request) => req.user),
+  assertIsCorrectPassword: vi.fn(),
+  assertIsUniqueEmail: vi.fn(),
+  assertHasNoOwnedRooms: vi.fn(),
 }));
 
 vi.mock('../services/token.service.js', () => ({
@@ -89,6 +96,10 @@ vi.mock('../lib/logger.js', () => ({
     info: vi.fn(),
     error: vi.fn(),
   },
+}));
+
+vi.mock('../lib/socket.js', () => ({
+  disconnectUserSockets: vi.fn(),
 }));
 
 function makeUser(overrides: Partial<User> = {}): User {
@@ -128,6 +139,183 @@ describe('userController', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     next = vi.fn();
+  });
+
+  describe('getMe', () => {
+    it('returns the authenticated user from req.user without a password field', async () => {
+      const user = makeUser({ id: 'user-1' });
+      const req = makeReq({ user: { ...user, sessionId: 'session-1' } });
+      const res = makeRes();
+
+      await userController.getMe(req, res, next);
+
+      expect(userService.getOneById).not.toHaveBeenCalled();
+      expect(assertIsUser).not.toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(200);
+      const sent = vi.mocked(res.send).mock.calls[0]?.[0];
+      expect(sent).not.toHaveProperty('password');
+      expect(sent).toMatchObject({ id: 'user-1', email: user.email });
+    });
+  });
+
+  describe('update', () => {
+    it('updates the user without re-fetching it when the email is unchanged', async () => {
+      const currentUser = makeUser({ id: 'user-1', email: 'same@example.com' });
+      const req = makeReq({
+        user: { ...currentUser, sessionId: 'session-1' },
+        body: {
+          userData: { name: 'New Name', email: 'same@example.com' },
+        },
+      });
+      const res = makeRes();
+      const updatedUser = makeUser({
+        id: 'user-1',
+        name: 'New Name',
+        email: 'same@example.com',
+      });
+      vi.mocked(userService.update).mockResolvedValue(updatedUser);
+
+      await userController.update(req, res, next);
+
+      expect(assertIsUser).not.toHaveBeenCalled();
+      expect(userService.update).toHaveBeenCalledWith('user-1', {
+        name: 'New Name',
+        email: 'same@example.com',
+      });
+      expect(mailer.sendActivationEmail).not.toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(200);
+    });
+
+    it('reissues the activation token and sends it when the email changes', async () => {
+      const currentUser = makeUser({ id: 'user-1', email: 'old@example.com' });
+      const req = makeReq({
+        user: { ...currentUser, sessionId: 'session-1' },
+        body: {
+          userData: { name: 'Test User', email: 'new@example.com' },
+        },
+      });
+      const res = makeRes();
+      const updatedUser = makeUser({
+        id: 'user-1',
+        email: 'new@example.com',
+        confirmedEmail: false,
+      });
+      vi.mocked(userService.update).mockResolvedValue(updatedUser);
+      vi.mocked(tokenService.reissue).mockResolvedValue('raw-activation-token');
+
+      await userController.update(req, res, next);
+
+      expect(userService.update).toHaveBeenCalledWith('user-1', {
+        name: 'Test User',
+        email: 'new@example.com',
+        confirmedEmail: false,
+      });
+      expect(tokenService.reissue).toHaveBeenCalledWith({
+        userId: 'user-1',
+        type: 'ACTIVATION',
+      });
+      expect(mailer.sendActivationEmail).toHaveBeenCalledWith(
+        'new@example.com',
+        'raw-activation-token',
+      );
+    });
+  });
+
+  describe('updatePassword', () => {
+    it('updates the password and revokes sessions when the current password is correct', async () => {
+      const user = makeUser({ id: 'user-1' });
+      const authUser = { ...user, sessionId: 'session-1' };
+      const req = makeReq({
+        user: authUser,
+        body: {
+          passwordData: {
+            currentPassword: 'OldPass1',
+            newPassword: 'NewPass1',
+          },
+        },
+      });
+      const res = makeRes();
+      vi.mocked(assertIsCorrectPassword).mockResolvedValue(undefined);
+      vi.mocked(prisma.$transaction).mockImplementation(async (fn) =>
+        fn({} as never),
+      );
+
+      await userController.updatePassword(req, res, next);
+
+      expect(assertIsUser).not.toHaveBeenCalled();
+      expect(assertIsCorrectPassword).toHaveBeenCalledWith(
+        authUser,
+        'OldPass1',
+      );
+      expect(userService.updatePassword).toHaveBeenCalledWith(
+        'user-1',
+        'NewPass1',
+        {},
+      );
+      expect(refreshTokenService.revokeAllForUser).toHaveBeenCalledWith(
+        'user-1',
+        {},
+      );
+      expect(res.sendStatus).toHaveBeenCalledWith(204);
+    });
+
+    it('propagates the error and never touches the password when the current password is wrong', async () => {
+      const user = makeUser({ id: 'user-1' });
+      const req = makeReq({
+        user: { ...user, sessionId: 'session-1' },
+        body: {
+          passwordData: {
+            currentPassword: 'WrongPass1',
+            newPassword: 'NewPass1',
+          },
+        },
+      });
+      const res = makeRes();
+      vi.mocked(assertIsCorrectPassword).mockRejectedValue(
+        new Error('Incorrect password'),
+      );
+
+      await expect(
+        userController.updatePassword(req, res, next),
+      ).rejects.toThrow('Incorrect password');
+
+      expect(userService.updatePassword).not.toHaveBeenCalled();
+      expect(res.sendStatus).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('delete', () => {
+    it('deletes the user when they own no rooms', async () => {
+      const user = makeUser({ id: 'user-1' });
+      const req = makeReq({ user: { ...user, sessionId: 'session-1' } });
+      const res = makeRes();
+      vi.mocked(assertHasNoOwnedRooms).mockResolvedValue(undefined);
+
+      await userController.delete(req, res, next);
+
+      expect(assertIsUser).not.toHaveBeenCalled();
+      expect(assertHasNoOwnedRooms).toHaveBeenCalledWith('user-1');
+      expect(userService.delete).toHaveBeenCalledWith('user-1');
+      expect(res.sendStatus).toHaveBeenCalledWith(204);
+    });
+
+    it('propagates the error and never deletes when the user still owns rooms', async () => {
+      const user = makeUser({ id: 'user-1' });
+      const req = makeReq({ user: { ...user, sessionId: 'session-1' } });
+      const res = makeRes();
+      vi.mocked(assertHasNoOwnedRooms).mockRejectedValue(
+        new Error(
+          'User still owns one or more rooms, transfer ownership first',
+        ),
+      );
+
+      await expect(userController.delete(req, res, next)).rejects.toThrow(
+        'User still owns one or more rooms, transfer ownership first',
+      );
+
+      expect(userService.delete).not.toHaveBeenCalled();
+      expect(res.sendStatus).not.toHaveBeenCalled();
+    });
   });
 
   describe('login', () => {

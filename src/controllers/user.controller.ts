@@ -119,19 +119,15 @@ export const userController = {
   },
 
   async getMe(req: Request, res: Response, next: NextFunction) {
-    const { id } = getAuthUser(req);
-
-    const user = await assertIsUser(id);
+    const user = getAuthUser(req);
 
     res.status(200).send(stabilizeUser(user));
   },
 
   async update(req: Request, res: Response, next: NextFunction) {
-    const { id } = getAuthUser(req);
+    const currentUser = getAuthUser(req);
     const { userData } = req.body;
     const verifiedData = UpdatedUserData.parse(userData);
-
-    const currentUser = await assertIsUser(id);
 
     const isEmailChanged = verifiedData.email !== currentUser.email;
 
@@ -139,7 +135,7 @@ export const userController = {
       await assertIsUniqueEmail(verifiedData.email);
     }
 
-    const user = await userService.update(id, {
+    const user = await userService.update(currentUser.id, {
       ...verifiedData,
       ...(isEmailChanged ? { confirmedEmail: false } : {}),
     });
@@ -156,28 +152,24 @@ export const userController = {
   },
 
   async updatePassword(req: Request, res: Response, next: NextFunction) {
-    const { id } = getAuthUser(req);
+    const user = getAuthUser(req);
     const { passwordData } = req.body;
     const verifiedData = PasswordData.parse(passwordData);
-
-    const user = await assertIsUser(id);
 
     await assertIsCorrectPassword(user, verifiedData.currentPassword);
 
     await prisma.$transaction(async (tx) => {
-      await userService.updatePassword(id, verifiedData.newPassword, tx);
-      await refreshTokenService.revokeAllForUser(id, tx);
+      await userService.updatePassword(user.id, verifiedData.newPassword, tx);
+      await refreshTokenService.revokeAllForUser(user.id, tx);
     });
 
-    disconnectUserSockets(id);
+    disconnectUserSockets(user.id);
 
     res.sendStatus(204);
   },
 
   async delete(req: Request, res: Response, next: NextFunction) {
     const { id } = getAuthUser(req);
-
-    await assertIsUser(id);
 
     await assertHasNoOwnedRooms(id);
 

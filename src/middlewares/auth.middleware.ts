@@ -26,12 +26,7 @@ export const authMiddleware = async (
     if (user.tokenVersion !== tokenVersion) {
       throw new UnauthorizedError('Session revoked');
     }
-    req.user = {
-      id: user.id,
-      email: user.email,
-      name: user.name,
-      sessionId,
-    };
+    req.user = { ...user, sessionId };
   } catch (error) {
     if (error instanceof JsonWebTokenError) {
       throw new UnauthorizedError('Invalid or expired token');

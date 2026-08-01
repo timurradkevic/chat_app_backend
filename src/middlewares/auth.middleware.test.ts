@@ -140,23 +140,17 @@ describe('authMiddleware', () => {
       tokenVersion: 3,
       sessionId: 'family-1',
     });
-    vi.mocked(userService.getOneById).mockResolvedValue(
-      makeUser({
-        id: 'user-1',
-        email: 'user@example.com',
-        name: 'Test User',
-        tokenVersion: 3,
-      }),
-    );
-
-    await authMiddleware(req, res, next);
-
-    expect(req.user).toEqual({
+    const user = makeUser({
       id: 'user-1',
       email: 'user@example.com',
       name: 'Test User',
-      sessionId: 'family-1',
+      tokenVersion: 3,
     });
+    vi.mocked(userService.getOneById).mockResolvedValue(user);
+
+    await authMiddleware(req, res, next);
+
+    expect(req.user).toEqual({ ...user, sessionId: 'family-1' });
     expect(next).toHaveBeenCalledTimes(1);
     expect(next).toHaveBeenCalledWith();
   });
