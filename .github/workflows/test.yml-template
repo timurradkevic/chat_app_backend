@@ -1,3 +1,7 @@
+# This is a template for forks/copies of this project (not an active workflow).
+# The actual CI file is test.yml. Copy this file without the -template
+# suffix if you're forking the repo and want your own CI.
+
 name: Test
 
 on:
