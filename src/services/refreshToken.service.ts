@@ -190,6 +190,14 @@ export const refreshTokenService = {
     await prisma.refreshToken.delete({ where: { id: tokenId } });
   },
 
+  async revokeForUser(userId: string, tokenId: string): Promise<boolean> {
+    const { count } = await prisma.refreshToken.deleteMany({
+      where: { id: tokenId, userId },
+    });
+
+    return count > 0;
+  },
+
   async revokeAllForUser(userId: string, tx: Tx = prisma) {
     await tx.refreshToken.deleteMany({ where: { userId } });
   },

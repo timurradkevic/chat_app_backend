@@ -13,6 +13,7 @@ import {
   assertIsEmailVerified,
   assertIsValidRefreshToken,
   getAuthUser,
+  NotFoundError,
 } from '../utils/checks.js';
 import type { User } from '../generated/prisma/client.js';
 import { jwtService } from '../utils/jwt.js';
@@ -425,6 +426,23 @@ export const userController = {
     }));
 
     res.status(200).send(formattedSessions);
+  },
+
+  async revokeSession(
+    req: Request<{ sessionId: string }>,
+    res: Response,
+    next: NextFunction,
+  ) {
+    const { id } = getAuthUser(req);
+    const { sessionId } = req.params;
+
+    const revoked = await refreshTokenService.revokeForUser(id, sessionId);
+
+    if (!revoked) {
+      throw new NotFoundError('Session not found');
+    }
+
+    res.sendStatus(204);
   },
 
   async search(

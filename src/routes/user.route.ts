@@ -95,6 +95,11 @@ userRouter.get(
   catchError(authMiddleware),
   catchError(userController.getSessions),
 );
+userRouter.delete(
+  '/sessions/:sessionId',
+  catchError(authMiddleware),
+  catchError(userController.revokeSession),
+);
 userRouter.get(
   '/search',
   catchError(authMiddleware),
