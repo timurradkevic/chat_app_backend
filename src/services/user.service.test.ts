@@ -150,7 +150,7 @@ describe('userService', () => {
     });
   });
 
-  describe('linkGoogleId', () => {
+  describe('linkGoogleIdWithConfirmedEmail', () => {
     it('confirms the email, links the googleId, and clears leftover activation tokens', async () => {
       const tx = {
         user: {
@@ -169,11 +169,45 @@ describe('userService', () => {
         cb(tx as unknown as TransactionClient),
       );
 
-      await userService.linkGoogleId('user-1', 'google-123');
+      await userService.linkGoogleIdWithConfirmedEmail('user-1', 'google-123');
 
       expect(tx.user.update).toHaveBeenCalledWith({
         where: { id: 'user-1' },
         data: { confirmedEmail: true, googleId: 'google-123' },
+      });
+      expect(tx.token.deleteMany).toHaveBeenCalledWith({
+        where: { userId: 'user-1', type: TokenTypes.ACTIVATION },
+      });
+    });
+  });
+
+  describe('linkGoogleIdWithUnconfirmedEmail', () => {
+    it('confirms the email, links the googleId, and clears leftover activation tokens', async () => {
+      const tx = {
+        user: {
+          update: vi
+            .fn<TransactionClient['user']['update']>()
+            .mockResolvedValue(
+              makeUser({ confirmedEmail: true, googleId: 'google-123' }),
+            ),
+        },
+        token: {
+          deleteMany: vi.fn<TransactionClient['token']['deleteMany']>(),
+        },
+      };
+
+      vi.mocked(prisma.$transaction).mockImplementation(async (cb) =>
+        cb(tx as unknown as TransactionClient),
+      );
+
+      await userService.linkGoogleIdWithUnconfirmedEmail(
+        'user-1',
+        'google-123',
+      );
+
+      expect(tx.user.update).toHaveBeenCalledWith({
+        where: { id: 'user-1' },
+        data: { confirmedEmail: true, googleId: 'google-123', password: null },
       });
       expect(tx.token.deleteMany).toHaveBeenCalledWith({
         where: { userId: 'user-1', type: TokenTypes.ACTIVATION },

@@ -7,12 +7,15 @@ import { userService } from '../services/user.service.js';
 import { tokenService } from '../services/token.service.js';
 import { mailer } from '../utils/email.js';
 import { prisma } from '../lib/prisma.js';
+import { logger } from '../lib/logger.js';
 import {
   assertIsCorrectEmailAndPassword,
   assertIsConfirmedEmail,
   assertIsValidRefreshToken,
   assertIsUser,
   assertIsValidToken,
+  assertIsValidGoogleToken,
+  assertIsEmailVerified,
 } from '../utils/checks.js';
 import type { User } from '../generated/prisma/client.js';
 
@@ -39,9 +42,13 @@ vi.mock('../services/user.service.js', () => ({
   userService: {
     getOneById: vi.fn(),
     getOneByEmail: vi.fn(),
+    getOneByGoogleId: vi.fn(),
     incrementTokenVersion: vi.fn(),
     updatePassword: vi.fn(),
     confirmEmail: vi.fn(),
+    linkGoogleIdWithUnconfirmedEmail: vi.fn(),
+    linkGoogleIdWithConfirmedEmail: vi.fn(),
+    createFromGoogle: vi.fn(),
   },
 }));
 
@@ -51,6 +58,8 @@ vi.mock('../utils/checks.js', () => ({
   assertIsValidRefreshToken: vi.fn(),
   assertIsUser: vi.fn(),
   assertIsValidToken: vi.fn(),
+  assertIsValidGoogleToken: vi.fn(),
+  assertIsEmailVerified: vi.fn(),
 }));
 
 vi.mock('../services/token.service.js', () => ({
@@ -70,6 +79,14 @@ vi.mock('../utils/email.js', () => ({
 vi.mock('../lib/prisma.js', () => ({
   prisma: {
     $transaction: vi.fn(),
+  },
+}));
+
+vi.mock('../lib/logger.js', () => ({
+  logger: {
+    warn: vi.fn(),
+    info: vi.fn(),
+    error: vi.fn(),
   },
 }));
 
@@ -274,6 +291,157 @@ describe('userController', () => {
         userAgent: 'Mozilla/5.0',
         ipAddress: '203.0.113.7',
       });
+    });
+  });
+
+  describe('loginWithGoogle', () => {
+    it('links the Google id and clears the password when an unconfirmed account with the same email already exists', async () => {
+      const existingUser = makeUser({
+        id: 'user-1',
+        email: 'user@example.com',
+        confirmedEmail: false,
+        password: 'hashed',
+        googleId: null,
+        tokenVersion: 3,
+      });
+
+      const googleTokenPayload = {
+        email: 'user@example.com',
+        sub: 'google-sub-1',
+        name: 'Test User',
+        email_verified: true,
+        iss: 'test-issuer',
+        aud: 'test-audience',
+        iat: 1,
+        exp: 2,
+      };
+
+      vi.mocked(assertIsValidGoogleToken).mockResolvedValue(googleTokenPayload);
+      vi.mocked(assertIsEmailVerified).mockReturnValue(undefined);
+      vi.mocked(userService.getOneByGoogleId).mockResolvedValue(null);
+      vi.mocked(userService.getOneByEmail).mockResolvedValue(existingUser);
+      vi.mocked(refreshTokenService.create).mockResolvedValue({
+        rawToken: 'raw-refresh-token',
+        familyId: 'family-1',
+      });
+      vi.mocked(jwtService.sign).mockReturnValue('signed-access-token');
+
+      const req = makeReq({
+        body: { googleLoginData: { idToken: 'raw-id-token' } },
+      });
+      const res = makeRes();
+
+      await userController.loginWithGoogle(req, res, next);
+
+      // The account is linked via the "unconfirmed email" path, which is the
+      // one responsible for clearing out the old password (password: null),
+      // so the previous password must no longer be usable to log in.
+      expect(userService.linkGoogleIdWithUnconfirmedEmail).toHaveBeenCalledWith(
+        'user-1',
+        'google-sub-1',
+      );
+      expect(userService.linkGoogleIdWithConfirmedEmail).not.toHaveBeenCalled();
+
+      expect(refreshTokenService.create).toHaveBeenCalledWith('user-1', {});
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.send).toHaveBeenCalledWith({
+        accessToken: 'signed-access-token',
+        refreshToken: 'raw-refresh-token',
+      });
+    });
+
+    it('logs a warning with userId, googleId, and email when auto-linking clears the password on an unconfirmed account', async () => {
+      const existingUser = makeUser({
+        id: 'user-1',
+        email: 'user@example.com',
+        confirmedEmail: false,
+        password: 'hashed',
+        googleId: null,
+        tokenVersion: 3,
+      });
+
+      const googleTokenPayload = {
+        email: 'user@example.com',
+        sub: 'google-sub-1',
+        name: 'Test User',
+        email_verified: true,
+        iss: 'test-issuer',
+        aud: 'test-audience',
+        iat: 1,
+        exp: 2,
+      };
+
+      vi.mocked(assertIsValidGoogleToken).mockResolvedValue(googleTokenPayload);
+      vi.mocked(assertIsEmailVerified).mockReturnValue(undefined);
+      vi.mocked(userService.getOneByGoogleId).mockResolvedValue(null);
+      vi.mocked(userService.getOneByEmail).mockResolvedValue(existingUser);
+      vi.mocked(refreshTokenService.create).mockResolvedValue({
+        rawToken: 'raw-refresh-token',
+        familyId: 'family-1',
+      });
+      vi.mocked(jwtService.sign).mockReturnValue('signed-access-token');
+
+      const req = makeReq({
+        body: { googleLoginData: { idToken: 'raw-id-token' } },
+      });
+      const res = makeRes();
+
+      await userController.loginWithGoogle(req, res, next);
+
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          event: 'google_account_link_password_reset',
+          userId: 'user-1',
+          googleId: 'google-sub-1',
+          email: 'user@example.com',
+          message: expect.stringContaining('unconfirmed'),
+        }),
+      );
+    });
+
+    it('does not log a warning when linking to an already-confirmed account (no password reset happens)', async () => {
+      const existingUser = makeUser({
+        id: 'user-2',
+        email: 'confirmed@example.com',
+        confirmedEmail: true,
+        password: 'hashed',
+        googleId: null,
+        tokenVersion: 1,
+      });
+
+      const googleTokenPayload = {
+        email: 'confirmed@example.com',
+        sub: 'google-sub-2',
+        name: 'Confirmed User',
+        email_verified: true,
+        iss: 'test-issuer',
+        aud: 'test-audience',
+        iat: 1,
+        exp: 2,
+      };
+
+      vi.mocked(assertIsValidGoogleToken).mockResolvedValue(googleTokenPayload);
+      vi.mocked(assertIsEmailVerified).mockReturnValue(undefined);
+      vi.mocked(userService.getOneByGoogleId).mockResolvedValue(null);
+      vi.mocked(userService.getOneByEmail).mockResolvedValue(existingUser);
+      vi.mocked(refreshTokenService.create).mockResolvedValue({
+        rawToken: 'raw-refresh-token',
+        familyId: 'family-2',
+      });
+      vi.mocked(jwtService.sign).mockReturnValue('signed-access-token');
+
+      const req = makeReq({
+        body: { googleLoginData: { idToken: 'raw-id-token' } },
+      });
+      const res = makeRes();
+
+      await userController.loginWithGoogle(req, res, next);
+
+      expect(userService.linkGoogleIdWithConfirmedEmail).toHaveBeenCalledWith(
+        'user-2',
+        'google-sub-2',
+      );
+      expect(logger.warn).not.toHaveBeenCalled();
     });
   });
 

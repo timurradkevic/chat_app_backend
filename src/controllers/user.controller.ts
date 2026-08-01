@@ -19,6 +19,7 @@ import { tokenService } from '../services/token.service.js';
 import { mailer } from '../utils/email.js';
 import { refreshTokenService } from '../services/refreshToken.service.js';
 import { prisma } from '../lib/prisma.js';
+import { logger } from '../lib/logger.js';
 
 const stabilizeUser = (user: User) => {
   const { password, ...userWithoutPass } = user;
@@ -252,8 +253,23 @@ export const userController = {
       const userByEmail = await userService.getOneByEmail(email);
 
       if (userByEmail) {
-        // Auto-linking Google account by verified email — Google's email_verified already proves ownership, so this is safe
-        await userService.linkGoogleId(userByEmail.id, sub);
+        if (userByEmail.confirmedEmail === true) {
+          // Auto-linking Google account by verified email — Google's email_verified already proves ownership, so this is safe
+          await userService.linkGoogleIdWithConfirmedEmail(userByEmail.id, sub);
+        } else {
+          await userService.linkGoogleIdWithUnconfirmedEmail(
+            userByEmail.id,
+            sub,
+          );
+          logger.warn({
+            event: 'google_account_link_password_reset',
+            userId: userByEmail.id,
+            googleId: sub,
+            email: userByEmail.email,
+            message:
+              'Auto-linking Google account to unconfirmed email — resetting password',
+          });
+        }
 
         const { rawToken: refreshToken, familyId } =
           await refreshTokenService.create(userByEmail.id, metadata);

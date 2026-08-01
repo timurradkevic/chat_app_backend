@@ -75,7 +75,18 @@ export const userService = {
     });
   },
 
-  async linkGoogleId(userId: string, googleId: string) {
+  async linkGoogleIdWithUnconfirmedEmail(userId: string, googleId: string) {
+    await prisma.$transaction(async (tx) => {
+      await tx.user.update({
+        where: { id: userId },
+        data: { confirmedEmail: true, googleId, password: null },
+      });
+
+      await tx.token.deleteMany({ where: { userId, type: 'ACTIVATION' } });
+    });
+  },
+
+  async linkGoogleIdWithConfirmedEmail(userId: string, googleId: string) {
     await prisma.$transaction(async (tx) => {
       await tx.user.update({
         where: { id: userId },
