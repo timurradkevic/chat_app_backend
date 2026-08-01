@@ -18,6 +18,7 @@ import { jwtService } from '../utils/jwt.js';
 import { tokenService } from '../services/token.service.js';
 import { mailer } from '../utils/email.js';
 import { refreshTokenService } from '../services/refreshToken.service.js';
+import { prisma } from '../lib/prisma.js';
 
 const stabilizeUser = (user: User) => {
   const { password, ...userWithoutPass } = user;
@@ -150,7 +151,11 @@ export const userController = {
     const user = await assertIsUser(id);
 
     await assertIsCorrectPassword(user, verifiedData.currentPassword);
-    await userService.updatePassword(id, verifiedData.newPassword);
+
+    await prisma.$transaction(async (tx) => {
+      await userService.updatePassword(id, verifiedData.newPassword, tx);
+      await refreshTokenService.revokeAllForUser(id, tx);
+    });
 
     res.sendStatus(204);
   },
@@ -365,11 +370,15 @@ export const userController = {
 
     const tokenRecord = await assertIsValidToken(resetToken, 'RESET');
 
-    await userService.updatePassword(
-      tokenRecord.userId,
-      verifiedData.newPassword,
-    );
-    await tokenService.invalidate(tokenRecord.id);
+    await prisma.$transaction(async (tx) => {
+      await userService.updatePassword(
+        tokenRecord.userId,
+        verifiedData.newPassword,
+        tx,
+      );
+      await refreshTokenService.revokeAllForUser(tokenRecord.userId, tx);
+      await tokenService.invalidate(tokenRecord.id, tx);
+    });
 
     res.sendStatus(204);
   },

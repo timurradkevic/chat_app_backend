@@ -1,8 +1,9 @@
 import { createHash, randomBytes } from 'node:crypto';
-import type { Token, TokenTypes } from '../generated/prisma/client.js';
+import type { Token, TokenTypes, Prisma } from '../generated/prisma/client.js';
 import { prisma } from '../lib/prisma.js';
 
 type TokenData = Pick<Token, 'userId' | 'type'>;
+type Tx = Prisma.TransactionClient | typeof prisma;
 
 const EXPIRATION_MS: Record<TokenTypes, number> = {
   ACTIVATION: 24 * 60 * 60 * 1000,
@@ -52,7 +53,7 @@ export const tokenService = {
     return rawToken;
   },
 
-  async invalidate(tokenId: string) {
-    await prisma.token.delete({ where: { id: tokenId } });
+  async invalidate(tokenId: string, tx: Tx = prisma) {
+    await tx.token.delete({ where: { id: tokenId } });
   },
 };

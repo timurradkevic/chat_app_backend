@@ -1,7 +1,10 @@
 import { createHash, randomBytes } from 'node:crypto';
+import type { Prisma } from '../generated/prisma/client.js';
 import { prisma } from '../lib/prisma.js';
 
 const REUSE_GRACE_PERIOD_MS = 10 * 1000; // 10 seconds
+
+type Tx = Prisma.TransactionClient | typeof prisma;
 
 export const refreshTokenService = {
   async create(
@@ -90,8 +93,8 @@ export const refreshTokenService = {
     await prisma.refreshToken.delete({ where: { id: tokenId } });
   },
 
-  async revokeAllForUser(userId: string) {
-    await prisma.refreshToken.deleteMany({ where: { userId } });
+  async revokeAllForUser(userId: string, tx: Tx = prisma) {
+    await tx.refreshToken.deleteMany({ where: { userId } });
   },
 
   async listSessions(userId: string) {

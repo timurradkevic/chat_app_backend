@@ -1,4 +1,4 @@
-import type { User } from '../generated/prisma/client.js';
+import type { User, Prisma } from '../generated/prisma/client.js';
 import { prisma } from '../lib/prisma.js';
 import bcrypt from 'bcrypt';
 
@@ -6,6 +6,8 @@ type UserData = Pick<User, 'name' | 'email' | 'password'>;
 type UserGoogleData = Pick<User, 'name' | 'email' | 'googleId'>;
 type UpdatedUserData = Pick<User, 'name' | 'email'> &
   Partial<Pick<User, 'confirmedEmail'>>;
+
+type Tx = Prisma.TransactionClient | typeof prisma;
 
 export const userService = {
   async getOneById(userId: string) {
@@ -62,12 +64,12 @@ export const userService = {
     return updatedUser;
   },
 
-  async updatePassword(userId: string, newPassword: string) {
+  async updatePassword(userId: string, newPassword: string, tx: Tx = prisma) {
     const hashPass = await bcrypt.hash(newPassword, 10);
 
-    await prisma.user.update({
+    await tx.user.update({
       where: { id: userId },
-      data: { password: hashPass },
+      data: { password: hashPass, tokenVersion: { increment: 1 } },
     });
   },
 
