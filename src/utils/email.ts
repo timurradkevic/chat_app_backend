@@ -4,9 +4,12 @@ const EMAIL = process.env.EMAIL;
 const EMAIL_PASSWORD = process.env.EMAIL_PASSWORD;
 const SMTP_HOST = process.env.SMTP_HOST;
 const SMTP_PORT = Number(process.env.SMTP_PORT);
+const CLIENT_HOST = process.env.CLIENT_HOST;
 
-if (!EMAIL || !EMAIL_PASSWORD || !SMTP_HOST || !SMTP_PORT) {
-  throw new Error('EMAIL, EMAIL_PASSWORD, SMTP_HOST and SMTP_PORT must be set');
+if (!EMAIL || !EMAIL_PASSWORD || !SMTP_HOST || !SMTP_PORT || !CLIENT_HOST) {
+  throw new Error(
+    'EMAIL, EMAIL_PASSWORD, SMTP_HOST, SMTP_PORT and CLIENT_HOST must be set',
+  );
 }
 
 const transporter = nodemailer.createTransport({
@@ -30,7 +33,7 @@ export const mailer = {
   },
 
   sendActivationEmail(email: string, token: string) {
-    const href = `${process.env.CLIENT_HOST}/activation/${token}`;
+    const href = `${CLIENT_HOST}/activation/${token}`;
     const html = `
       <h1>Activate</h1>
       <a href="${href}">${href}</a>
@@ -40,7 +43,7 @@ export const mailer = {
   },
 
   sendResetPasswordEmail(email: string, token: string) {
-    const href = `${process.env.CLIENT_HOST}/reset-password/${token}`;
+    const href = `${CLIENT_HOST}/reset-password/${token}`;
     const html = `
       <h1>Reset your password</h1>
       <p>If you requested a password reset, follow the link below. This link expires in 30 minutes.</p>
