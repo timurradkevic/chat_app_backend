@@ -105,4 +105,11 @@ export const userService = {
       await tx.token.delete({ where: { id: tokenId } });
     });
   },
+
+  async incrementTokenVersion(userId: string) {
+    await prisma.user.update({
+      where: { id: userId },
+      data: { tokenVersion: { increment: 1 } },
+    });
+  },
 };

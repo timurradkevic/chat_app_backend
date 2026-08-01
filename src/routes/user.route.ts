@@ -6,6 +6,7 @@ import {
   activationEmailRateLimitMiddleware,
   activationIpRateLimitMiddleware,
   loginRateLimitMiddleware,
+  logoutRateLimitMiddleware,
   passwordResetEmailRateLimitMiddleware,
   passwordResetIpRateLimitMiddleware,
   refreshRateLimitMiddleware,
@@ -69,4 +70,10 @@ userRouter.post(
 userRouter.post(
   '/password-reset/:resetToken',
   catchError(userController.confirmPasswordReset),
+);
+userRouter.post('/logout', catchError(logoutRateLimitMiddleware), catchError(userController.logout));
+userRouter.post(
+  '/logout-all',
+  catchError(authMiddleware),
+  catchError(userController.logoutAll),
 );

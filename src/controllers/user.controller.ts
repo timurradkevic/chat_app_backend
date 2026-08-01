@@ -85,6 +85,8 @@ const ConfirmPasswordResetData = z.object({
   newPassword: PasswordSchema,
 });
 
+const LogoutData = z.object({ refreshToken: z.string() });
+
 export const userController = {
   async register(req: Request, res: Response, next: NextFunction) {
     const { registerData } = req.body;
@@ -368,6 +370,28 @@ export const userController = {
       verifiedData.newPassword,
     );
     await tokenService.invalidate(tokenRecord.id);
+
+    res.sendStatus(204);
+  },
+
+  async logout(req: Request, res: Response, next: NextFunction) {
+    const { logoutData } = req.body;
+    const { refreshToken } = LogoutData.parse(logoutData);
+
+    const token = await refreshTokenService.findByRawToken(refreshToken);
+
+    if (token) {
+      await refreshTokenService.revoke(token.id);
+    }
+
+    res.sendStatus(204);
+  },
+
+  async logoutAll(req: Request, res: Response, next: NextFunction) {
+    const { id } = req.user;
+
+    await userService.incrementTokenVersion(id);
+    await refreshTokenService.revokeAllForUser(id);
 
     res.sendStatus(204);
   },

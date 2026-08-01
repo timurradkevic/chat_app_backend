@@ -93,3 +93,14 @@ export const refreshRateLimitMiddleware = rateLimit({
   max: 30,
   message: 'Too many refresh attempts, please try again later',
 });
+
+export const logoutRateLimitMiddleware = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  skipSuccessfulRequests: true,
+  store: createRedisStore(),
+  standardHeaders: 'draft-8',
+  legacyHeaders: false,
+  ipv6Subnet: 56,
+  max: 30,
+  message: 'Too many logout attempts, please try again later',
+});

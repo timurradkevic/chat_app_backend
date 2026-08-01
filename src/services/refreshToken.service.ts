@@ -81,6 +81,11 @@ export const refreshTokenService = {
     return { rawToken: newRawToken, userId: token.userId };
   },
 
+  async findByRawToken(rawToken: string) {
+    const tokenHash = createHash('sha256').update(rawToken).digest('hex');
+    return prisma.refreshToken.findUnique({ where: { tokenHash } });
+  },
+
   async revoke(tokenId: string) {
     await prisma.refreshToken.delete({ where: { id: tokenId } });
   },
