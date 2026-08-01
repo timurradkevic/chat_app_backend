@@ -18,10 +18,13 @@ export const authMiddleware = async (
   }
 
   try {
-    const { userId } = jwtService.verify(token);
+    const { userId, tokenVersion } = jwtService.verify(token);
     const user = await userService.getOneById(userId);
     if (!user) {
       throw new UnauthorizedError('User not found');
+    }
+    if (user.tokenVersion !== tokenVersion) {
+      throw new UnauthorizedError('Session revoked');
     }
     req.user = {
       id: user.id,
