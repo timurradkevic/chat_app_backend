@@ -268,6 +268,20 @@ describe('rateLimit.middleware', () => {
         limit: 10,
       });
     });
+
+    it('activationTokenRateLimitMiddleware: 1 hour, 30 requests', () => {
+      expect(optionsForCall(9)).toMatchObject({
+        windowMs: 60 * 60 * 1000,
+        limit: 30,
+      });
+    });
+
+    it('passwordResetTokenRateLimitMiddleware: 1 hour, 30 requests', () => {
+      expect(optionsForCall(10)).toMatchObject({
+        windowMs: 60 * 60 * 1000,
+        limit: 30,
+      });
+    });
   });
 
   // --- behavior: allows up to `limit`, blocks past it ----------------------
@@ -349,6 +363,45 @@ describe('rateLimit.middleware', () => {
       }
 
       const overLimit = await runMiddleware(mod.logoutRateLimitMiddleware, req);
+      expect(overLimit.blocked).toBe(true);
+    });
+
+    // Regression tests: GET /users/activation/:activationToken and
+    // POST /users/password-reset/:resetToken previously had no rate limit
+    // at all, unlike their sibling "request a token" endpoints.
+    it('activationTokenRateLimitMiddleware allows 30 requests then blocks the 31st', async () => {
+      const req = makeReq({ ip: '10.0.0.6' });
+
+      for (let i = 0; i < 30; i++) {
+        const result = await runMiddleware(
+          mod.activationTokenRateLimitMiddleware,
+          req,
+        );
+        expect(result.blocked).toBe(false);
+      }
+
+      const overLimit = await runMiddleware(
+        mod.activationTokenRateLimitMiddleware,
+        req,
+      );
+      expect(overLimit.blocked).toBe(true);
+    });
+
+    it('passwordResetTokenRateLimitMiddleware allows 30 requests then blocks the 31st', async () => {
+      const req = makeReq({ ip: '10.0.0.7' });
+
+      for (let i = 0; i < 30; i++) {
+        const result = await runMiddleware(
+          mod.passwordResetTokenRateLimitMiddleware,
+          req,
+        );
+        expect(result.blocked).toBe(false);
+      }
+
+      const overLimit = await runMiddleware(
+        mod.passwordResetTokenRateLimitMiddleware,
+        req,
+      );
       expect(overLimit.blocked).toBe(true);
     });
   });

@@ -116,3 +116,32 @@ export const googleLoginRateLimitMiddleware = rateLimit({
   legacyHeaders: false,
   ipv6Subnet: 56,
 });
+
+// Activation/reset tokens are 256-bit random strings, so brute-forcing one
+// directly is not practical. These IP limits exist mainly to keep noisy or
+// misbehaving clients from hammering the endpoint (DoS/log-noise
+// protection), matching the coverage their sibling "request a token"
+// endpoints already have — not as the primary defense.
+export const activationTokenRateLimitMiddleware = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  limit: 30,
+  skipSuccessfulRequests: true,
+
+  store: createRedisStore(),
+
+  standardHeaders: 'draft-8',
+  legacyHeaders: false,
+  ipv6Subnet: 56,
+});
+
+export const passwordResetTokenRateLimitMiddleware = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  limit: 30,
+  skipSuccessfulRequests: true,
+
+  store: createRedisStore(),
+
+  standardHeaders: 'draft-8',
+  legacyHeaders: false,
+  ipv6Subnet: 56,
+});

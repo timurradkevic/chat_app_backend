@@ -5,11 +5,13 @@ import { authMiddleware } from '../middlewares/auth.middleware.js';
 import {
   activationEmailRateLimitMiddleware,
   activationIpRateLimitMiddleware,
+  activationTokenRateLimitMiddleware,
   googleLoginRateLimitMiddleware,
   loginRateLimitMiddleware,
   logoutRateLimitMiddleware,
   passwordResetEmailRateLimitMiddleware,
   passwordResetIpRateLimitMiddleware,
+  passwordResetTokenRateLimitMiddleware,
   refreshRateLimitMiddleware,
   registerRateLimitMiddleware,
 } from '../middlewares/rateLimit.middleware.js';
@@ -53,6 +55,7 @@ userRouter.post(
 );
 userRouter.get(
   '/activation/:activationToken',
+  catchError(activationTokenRateLimitMiddleware),
   catchError(userController.activate),
 );
 userRouter.post(
@@ -74,6 +77,7 @@ userRouter.post(
 );
 userRouter.post(
   '/password-reset/:resetToken',
+  catchError(passwordResetTokenRateLimitMiddleware),
   catchError(userController.confirmPasswordReset),
 );
 userRouter.post(
