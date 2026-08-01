@@ -14,6 +14,7 @@ import {
   assertIsValidRefreshToken,
   getAuthUser,
   NotFoundError,
+  BadRequestError,
 } from '../utils/checks.js';
 import type { User } from '../generated/prisma/client.js';
 import { jwtService } from '../utils/jwt.js';
@@ -59,7 +60,9 @@ const UpdatedUserData = z.object({
 });
 
 const PasswordData = z.object({
-  currentPassword: PasswordSchema,
+  // Optional: users who signed up via Google only (no password set yet)
+  // have nothing to verify this against — see updatePassword below.
+  currentPassword: PasswordSchema.optional(),
   newPassword: PasswordSchema,
 });
 
@@ -163,7 +166,22 @@ export const userController = {
     const { passwordData } = req.body;
     const verifiedData = PasswordData.parse(passwordData);
 
-    await assertIsCorrectPassword(user, verifiedData.currentPassword);
+    if (user.password === null) {
+      // Google-only account with no password set yet: there is nothing to
+      // verify currentPassword against, so this call sets an initial
+      // password instead of changing an existing one.
+      if (verifiedData.currentPassword) {
+        throw new BadRequestError(
+          'This account has no password set; omit currentPassword to set one',
+        );
+      }
+    } else {
+      if (!verifiedData.currentPassword) {
+        throw new BadRequestError('currentPassword is required');
+      }
+
+      await assertIsCorrectPassword(user, verifiedData.currentPassword);
+    }
 
     await prisma.$transaction(async (tx) => {
       await userService.updatePassword(user.id, verifiedData.newPassword, tx);
@@ -178,6 +196,9 @@ export const userController = {
   async delete(req: Request, res: Response, next: NextFunction) {
     const { id } = getAuthUser(req);
 
+    // Check-then-delete is run inside a single transaction so a room
+    // cannot be created by the user between the ownership check and the
+    // actual deletion (TOCTOU) — see assertHasNoOwnedRooms / userService.delete.
     await prisma.$transaction(async (tx) => {
       await assertHasNoOwnedRooms(id, tx);
       await userService.delete(id, tx);
