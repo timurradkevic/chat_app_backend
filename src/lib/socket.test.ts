@@ -168,7 +168,7 @@ describe('socket.ts', () => {
   });
 
   describe('connection middleware (per-IP connection counter)', () => {
-    it('increments the connection counter and sets expiry on the first connection from an IP', async () => {
+    it('increments the connection counter and refreshes its TTL on the first connection from an IP', async () => {
       vi.mocked(redis.incr).mockResolvedValue(1);
       const socket = makeFakeSocket();
       const next = vi.fn();
@@ -178,13 +178,18 @@ describe('socket.ts', () => {
       expect(redis.incr).toHaveBeenCalledWith('socket:connections:127.0.0.1');
       expect(redis.expire).toHaveBeenCalledWith(
         'socket:connections:127.0.0.1',
-        60,
+        24 * 60 * 60,
       );
       expect(next).toHaveBeenCalledWith();
       expect(socket.data.userId).toBe('user-1');
     });
 
-    it('does not set expiry on subsequent connections from the same IP', async () => {
+    // Regression test: the TTL must be refreshed on every connection, not
+    // just the first one. Otherwise a long-lived batch of WebSocket
+    // connections would see the Redis counter key silently expire and
+    // reset to 0 while those connections are still open, defeating the
+    // per-IP connection cap.
+    it('also refreshes the TTL on subsequent connections from the same IP', async () => {
       vi.mocked(redis.incr).mockResolvedValue(2);
       const socket = makeFakeSocket();
       const next = vi.fn();
@@ -192,7 +197,10 @@ describe('socket.ts', () => {
       await middleware(socket, next);
 
       expect(redis.incr).toHaveBeenCalledWith('socket:connections:127.0.0.1');
-      expect(redis.expire).not.toHaveBeenCalled();
+      expect(redis.expire).toHaveBeenCalledWith(
+        'socket:connections:127.0.0.1',
+        24 * 60 * 60,
+      );
       expect(next).toHaveBeenCalledWith();
     });
   });
@@ -224,6 +232,7 @@ describe('socket.ts', () => {
       // must be rolled back on rejection, same as the other failure paths.
       expect(redis.atomicDecrement).toHaveBeenCalledWith(
         'socket:connections:127.0.0.1',
+        24 * 60 * 60,
       );
     });
 
@@ -274,6 +283,7 @@ describe('socket.ts', () => {
       );
       expect(redis.atomicDecrement).toHaveBeenCalledWith(
         'socket:connections:127.0.0.1',
+        24 * 60 * 60,
       );
     });
   });
@@ -290,6 +300,7 @@ describe('socket.ts', () => {
 
       expect(redis.atomicDecrement).toHaveBeenCalledWith(
         'socket:connections:127.0.0.1',
+        24 * 60 * 60,
       );
       expect(redis.del).toHaveBeenCalledWith('socket:room-events:socket-42');
     });

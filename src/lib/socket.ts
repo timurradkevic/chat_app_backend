@@ -51,6 +51,16 @@ export const io = new Server<
 
 const MAX_CONNECTIONS_PER_IP = 10;
 
+// Safety-net TTL for the per-IP connection counter. This is NOT meant to
+// cap connection lifetime — WebSocket connections routinely stay open far
+// longer than this. It exists only so a counter key can't leak forever if
+// a decrement is ever missed (process crash, etc). Because the TTL is
+// refreshed on every increment AND every decrement, it never lapses while
+// the IP has any real connection activity, so it does not silently reset
+// the limit for long-lived sockets the way a one-shot `EXPIRE` on the
+// first connection would.
+const CONNECTION_COUNT_TTL_SECONDS = 24 * 60 * 60;
+
 const ROOM_EVENT_LIMIT = 20;
 const ROOM_EVENT_WINDOW_MS = 10_000;
 
@@ -71,9 +81,11 @@ async function incrementConnectionCount(ip: string): Promise<number> {
 
   const count = await redis.incr(key);
 
-  if (count === 1) {
-    await redis.expire(key, 60);
-  }
+  // Refresh the safety-net TTL on every connection, not just the first.
+  // A one-shot `EXPIRE` set only when count === 1 would make the whole
+  // key vanish 60s after the first connection even while connections are
+  // still open, silently resetting the per-IP limit to 0.
+  await redis.expire(key, CONNECTION_COUNT_TTL_SECONDS);
 
   return count;
 }
@@ -81,7 +93,10 @@ async function incrementConnectionCount(ip: string): Promise<number> {
 async function decrementConnectionCount(ip: string) {
   const key = `socket:connections:${ip}`;
 
-  await redis.atomicDecrement(key);
+  // atomicDecrement deletes the key once the count reaches 0, and
+  // otherwise refreshes its TTL so the counter keeps self-healing without
+  // ever lapsing while the IP still has open connections.
+  await redis.atomicDecrement(key, CONNECTION_COUNT_TTL_SECONDS);
 }
 
 async function isRoomEventAllowed(

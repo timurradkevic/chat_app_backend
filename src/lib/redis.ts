@@ -32,10 +32,13 @@ return 1
 
 const DECREMENT_SCRIPT = `
 local key = KEYS[1]
+local ttlSeconds = tonumber(ARGV[1])
 local count = redis.call('DECR', key)
 
 if count <= 0 then
   redis.call('DEL', key)
+else
+  redis.call('EXPIRE', key, ttlSeconds)
 end
 
 return count
@@ -76,7 +79,7 @@ declare module 'ioredis' {
       member: string,
       ttlSeconds: number,
     ): Promise<number>;
-    atomicDecrement(key: string): Promise<number>;
+    atomicDecrement(key: string, ttlSeconds: number): Promise<number>;
   }
 }
 
