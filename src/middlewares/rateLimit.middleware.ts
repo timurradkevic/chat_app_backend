@@ -104,3 +104,15 @@ export const logoutRateLimitMiddleware = rateLimit({
   max: 30,
   message: 'Too many logout attempts, please try again later',
 });
+
+export const googleLoginRateLimitMiddleware = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  limit: 10,
+  skipSuccessfulRequests: true,
+
+  store: createRedisStore(),
+
+  standardHeaders: 'draft-8',
+  legacyHeaders: false,
+  ipv6Subnet: 56,
+});

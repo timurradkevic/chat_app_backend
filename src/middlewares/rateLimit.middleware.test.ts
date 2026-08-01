@@ -261,6 +261,13 @@ describe('rateLimit.middleware', () => {
         limit: 30,
       });
     });
+
+    it('googleLoginRateLimitMiddleware: 15 minutes, 10 requests', () => {
+      expect(optionsForCall(8)).toMatchObject({
+        windowMs: 15 * 60 * 1000,
+        limit: 10,
+      });
+    });
   });
 
   // --- behavior: allows up to `limit`, blocks past it ----------------------
@@ -277,6 +284,27 @@ describe('rateLimit.middleware', () => {
       const eighth = await runMiddleware(mod.loginRateLimitMiddleware, req);
       expect(eighth.blocked).toBe(true);
       expect(eighth.status).toBe(429);
+
+      expect(redisCall).toHaveBeenCalled();
+    });
+
+    it('googleLoginRateLimitMiddleware allows 10 requests then blocks the 11th', async () => {
+      const req = makeReq({ ip: '10.0.0.5' });
+
+      for (let i = 0; i < 10; i++) {
+        const result = await runMiddleware(
+          mod.googleLoginRateLimitMiddleware,
+          req,
+        );
+        expect(result.blocked).toBe(false);
+      }
+
+      const eleventh = await runMiddleware(
+        mod.googleLoginRateLimitMiddleware,
+        req,
+      );
+      expect(eleventh.blocked).toBe(true);
+      expect(eleventh.status).toBe(429);
 
       expect(redisCall).toHaveBeenCalled();
     });

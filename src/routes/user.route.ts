@@ -5,6 +5,7 @@ import { authMiddleware } from '../middlewares/auth.middleware.js';
 import {
   activationEmailRateLimitMiddleware,
   activationIpRateLimitMiddleware,
+  googleLoginRateLimitMiddleware,
   loginRateLimitMiddleware,
   logoutRateLimitMiddleware,
   passwordResetEmailRateLimitMiddleware,
@@ -45,7 +46,11 @@ userRouter.post(
   catchError(loginRateLimitMiddleware),
   catchError(userController.login),
 );
-userRouter.post('/google', catchError(userController.loginWithGoogle));
+userRouter.post(
+  '/google',
+  catchError(googleLoginRateLimitMiddleware),
+  catchError(userController.loginWithGoogle),
+);
 userRouter.get(
   '/activation/:activationToken',
   catchError(userController.activate),
