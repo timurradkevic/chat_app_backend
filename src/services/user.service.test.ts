@@ -180,4 +180,152 @@ describe('userService', () => {
       });
     });
   });
+
+  describe('searchUsersByName', () => {
+    it('returns an empty item list and a null cursor when nothing matches', async () => {
+      vi.mocked(prisma.user.findMany).mockResolvedValue([]);
+
+      const result = await userService.searchUsersByName('nomatch', {});
+
+      expect(result).toEqual({ items: [], nextCursor: null });
+    });
+
+    it('returns users whose name partially matches the query', async () => {
+      const matches = [
+        { id: 'u1', name: 'Johnathan Doe' },
+        { id: 'u2', name: 'John Smith' },
+      ];
+      vi.mocked(prisma.user.findMany).mockResolvedValue(matches as never);
+
+      const result = await userService.searchUsersByName('John', {});
+
+      expect(prisma.user.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { name: { contains: 'John', mode: 'insensitive' } },
+        }),
+      );
+      expect(result.items).toEqual(matches);
+    });
+
+    it('matches names case-insensitively by passing mode: "insensitive" to Prisma', async () => {
+      vi.mocked(prisma.user.findMany).mockResolvedValue([
+        { id: 'u1', name: 'ALICE WONDERLAND' },
+      ] as never);
+
+      await userService.searchUsersByName('alice', {});
+
+      expect(prisma.user.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { name: { contains: 'alice', mode: 'insensitive' } },
+        }),
+      );
+    });
+
+    it('truncates the results to the requested limit and returns the next cursor', async () => {
+      // Service requests limit + 1 rows to detect whether another page exists.
+      const returnedFromDb = [
+        { id: 'u1', name: 'User 1' },
+        { id: 'u2', name: 'User 2' },
+        { id: 'u3', name: 'User 3' },
+        { id: 'u4', name: 'User 4' },
+      ];
+      vi.mocked(prisma.user.findMany).mockResolvedValue(
+        returnedFromDb as never,
+      );
+
+      const result = await userService.searchUsersByName('User', {
+        limit: 3,
+      });
+
+      expect(prisma.user.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ take: 4 }),
+      );
+      expect(result.items).toHaveLength(3);
+      expect(result.items).toEqual(returnedFromDb.slice(0, 3));
+      expect(result.nextCursor).toBe('u3');
+    });
+
+    it('does not report a next cursor when the result set fits within the limit', async () => {
+      const returnedFromDb = [
+        { id: 'u1', name: 'User 1' },
+        { id: 'u2', name: 'User 2' },
+      ];
+      vi.mocked(prisma.user.findMany).mockResolvedValue(
+        returnedFromDb as never,
+      );
+
+      const result = await userService.searchUsersByName('User', {
+        limit: 5,
+      });
+
+      expect(result.items).toEqual(returnedFromDb);
+      expect(result.nextCursor).toBeNull();
+    });
+
+    it('falls back to the default limit of 10 when none is provided', async () => {
+      vi.mocked(prisma.user.findMany).mockResolvedValue([]);
+
+      await userService.searchUsersByName('a', {});
+
+      expect(prisma.user.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ take: 11 }),
+      );
+    });
+
+    it('paginates with skip: 1 and a cursor filter when a cursor is supplied', async () => {
+      vi.mocked(prisma.user.findMany).mockResolvedValue([]);
+
+      await userService.searchUsersByName('a', { cursor: 'u5', limit: 2 });
+
+      expect(prisma.user.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          skip: 1,
+          cursor: { id: 'u5' },
+          take: 3,
+        }),
+      );
+    });
+
+    it('omits skip and cursor entirely when no cursor is supplied', async () => {
+      vi.mocked(prisma.user.findMany).mockResolvedValue([]);
+
+      await userService.searchUsersByName('a', {});
+
+      const callArgs = vi.mocked(prisma.user.findMany).mock.calls[0]?.[0];
+      expect(callArgs).not.toHaveProperty('skip');
+      expect(callArgs).not.toHaveProperty('cursor');
+    });
+
+    it('orders results by id ascending for stable pagination', async () => {
+      vi.mocked(prisma.user.findMany).mockResolvedValue([]);
+
+      await userService.searchUsersByName('a', {});
+
+      expect(prisma.user.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ orderBy: { id: 'asc' } }),
+      );
+    });
+
+    it('requests only id and name from Prisma, keeping email, password, and googleId out of the result — the same field-hiding guarantee stabilizeUser provides in the controller', async () => {
+      vi.mocked(prisma.user.findMany).mockResolvedValue([
+        { id: 'u1', name: 'Alice' },
+        { id: 'u2', name: 'Alicia' },
+      ] as never);
+
+      const result = await userService.searchUsersByName('Alic', {});
+
+      expect(prisma.user.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          select: { id: true, name: true },
+        }),
+      );
+
+      for (const item of result.items) {
+        expect(item).not.toHaveProperty('email');
+        expect(item).not.toHaveProperty('password');
+        expect(item).not.toHaveProperty('googleId');
+        expect(Object.keys(item).sort()).toEqual(['id', 'name']);
+      }
+    });
+  });
 });
