@@ -86,3 +86,8 @@ userRouter.get(
   catchError(authMiddleware),
   catchError(userController.getSessions),
 );
+userRouter.get(
+  '/search',
+  catchError(authMiddleware),
+  catchError(userController.search),
+);

@@ -26,6 +26,9 @@ const stabilizeUser = (user: User) => {
   return userWithoutPass;
 };
 
+const MIN_QUERY_LENGTH = 2;
+const MAX_LIMIT = 100;
+
 const PasswordSchema = z
   .string()
   .min(8, 'Password must be at least 8 characters')
@@ -87,6 +90,12 @@ const ConfirmPasswordResetData = z.object({
 });
 
 const LogoutData = z.object({ refreshToken: z.string() });
+
+const SearchUsersQuery = z.object({
+  query: z.string().min(MIN_QUERY_LENGTH, 'Query cannot be empty'),
+  limit: z.coerce.number().int().positive().max(MAX_LIMIT).optional(),
+  cursor: z.string().optional(),
+});
 
 export const userController = {
   async register(req: Request, res: Response, next: NextFunction) {
@@ -398,5 +407,25 @@ export const userController = {
     }));
 
     res.status(200).send(formattedSessions);
+  },
+
+  async search(
+    req: Request<
+      unknown,
+      unknown,
+      unknown,
+      { query: string; limit?: string; cursor?: string }
+    >,
+    res: Response,
+    next: NextFunction,
+  ) {
+    const { query, limit, cursor } = SearchUsersQuery.parse(req.query);
+
+    const result = await userService.searchUsersByName(query, {
+      ...(limit !== undefined && { limit }),
+      ...(cursor !== undefined && { cursor }),
+    });
+
+    res.status(200).send(result);
   },
 };

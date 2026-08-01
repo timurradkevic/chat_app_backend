@@ -9,6 +9,8 @@ type UpdatedUserData = Pick<User, 'name' | 'email'> &
 
 type Tx = Prisma.TransactionClient | typeof prisma;
 
+const DEFAULT_LIMIT = 10;
+
 export const userService = {
   async getOneById(userId: string) {
     const user = await prisma.user.findUnique({ where: { id: userId } });
@@ -113,5 +115,39 @@ export const userService = {
       where: { id: userId },
       data: { tokenVersion: { increment: 1 } },
     });
+  },
+
+  async searchUsersByName(
+    query: string,
+    options: { limit?: number; cursor?: string },
+  ) {
+    const { limit = DEFAULT_LIMIT, cursor } = options;
+
+    const users = await prisma.user.findMany({
+      where: {
+        name: {
+          contains: query,
+          mode: 'insensitive',
+        },
+      },
+
+      take: limit + 1,
+      ...(cursor ? { skip: 1, cursor: { id: cursor } } : {}),
+      orderBy: {
+        id: 'asc',
+      },
+      select: {
+        id: true,
+        name: true,
+      },
+    });
+
+    const hasNextPage = users.length > limit;
+    const items = hasNextPage ? users.slice(0, limit) : users;
+
+    return {
+      items,
+      nextCursor: hasNextPage ? items[items.length - 1]?.id : null,
+    };
   },
 };
