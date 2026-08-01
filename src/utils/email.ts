@@ -1,4 +1,5 @@
 import nodemailer from 'nodemailer';
+import { logger } from '../lib/logger.js';
 
 const EMAIL = process.env.EMAIL;
 const EMAIL_PASSWORD = process.env.EMAIL_PASSWORD;
@@ -52,5 +53,16 @@ export const mailer = {
     `;
 
     return mailer.send(email, 'Reset your password', html);
+  },
+
+  async sendSafely(
+    sendFn: () => Promise<unknown>,
+    context: Record<string, unknown>,
+  ) {
+    try {
+      await sendFn();
+    } catch (err) {
+      logger.error({ err, ...context }, 'Failed to send email');
+    }
   },
 };

@@ -114,7 +114,10 @@ export const userController = {
       type: 'ACTIVATION',
     });
 
-    await mailer.sendActivationEmail(user.email, rawToken);
+    await mailer.sendSafely(
+      () => mailer.sendActivationEmail(user.email, rawToken),
+      { event: 'register_activation_email', userId: user.id },
+    );
 
     res.status(201).send(stabilizeUser(user));
   },
@@ -339,7 +342,10 @@ export const userController = {
         userId: user.id,
       });
 
-      await mailer.sendActivationEmail(user.email, rawToken);
+      await mailer.sendSafely(
+        () => mailer.sendActivationEmail(user.email, rawToken),
+        { event: 'resend_activation_email', userId: user.id },
+      );
     }
 
     res.sendStatus(204);
@@ -351,15 +357,16 @@ export const userController = {
 
     const user = await userService.getOneByEmail(verifiedData.email);
 
-    // Always respond 204 regardless of whether the email exists, so this
-    // endpoint can't be used to enumerate registered accounts.
     if (user) {
       const rawToken = await tokenService.reissue({
         type: 'RESET',
         userId: user.id,
       });
 
-      await mailer.sendResetPasswordEmail(user.email, rawToken);
+      await mailer.sendSafely(
+        () => mailer.sendResetPasswordEmail(user.email, rawToken),
+        { event: 'password_reset_email', userId: user.id },
+      );
     }
 
     res.sendStatus(204);

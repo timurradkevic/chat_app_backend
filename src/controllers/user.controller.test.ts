@@ -82,6 +82,7 @@ vi.mock('../utils/email.js', () => ({
   mailer: {
     sendResetPasswordEmail: vi.fn(),
     sendActivationEmail: vi.fn(),
+    sendSafely: vi.fn((sendFn) => sendFn()),
   },
 }));
 
