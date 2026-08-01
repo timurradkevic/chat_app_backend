@@ -265,7 +265,19 @@ export async function assertIsValidRefreshToken(rawToken: string) {
 }
 
 export async function assertIsValidGoogleToken(googleToken: string) {
-  const token = await googleService.verify(googleToken);
+  // googleService.verify rejects (rather than resolving to null) for an
+  // invalid, expired, or wrong-audience Google id_token — verifyIdToken
+  // throws on those cases instead of returning a falsy payload. Without
+  // this catch, that rejection would bubble past this assertion straight
+  // to the error middleware as an unhandled 500, instead of the expected
+  // 401 for what is really just an authentication failure.
+  let token;
+  try {
+    token = await googleService.verify(googleToken);
+  } catch {
+    throw new UnauthorizedError('Invalid Google token');
+  }
+
   if (!token) {
     throw new UnauthorizedError('Invalid Google token');
   }

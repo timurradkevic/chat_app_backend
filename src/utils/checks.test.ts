@@ -10,6 +10,7 @@ import {
   assertIsCorrectEmailAndPassword,
   assertIsValidToken,
   assertIsConfirmedEmail,
+  assertIsValidGoogleToken,
   ForbiddenError,
   ConflictError,
   UnauthorizedError,
@@ -19,6 +20,7 @@ import {
 import { roomService } from '../services/room.service.js';
 import { userService } from '../services/user.service.js';
 import { tokenService } from '../services/token.service.js';
+import { googleService } from './google.js';
 import { Role } from '../generated/prisma/enums.js';
 import type { Token, User } from '../generated/prisma/client.js';
 
@@ -33,6 +35,12 @@ vi.mock('../services/user.service.js', () => ({
   userService: {
     getOneByEmail: vi.fn(),
     verifyPassword: vi.fn(),
+  },
+}));
+
+vi.mock('./google.js', () => ({
+  googleService: {
+    verify: vi.fn(),
   },
 }));
 
@@ -266,6 +274,60 @@ describe('auth-related checks', () => {
       expect(() =>
         assertIsConfirmedEmail(makeUser({ confirmedEmail: true })),
       ).not.toThrow();
+    });
+  });
+
+  describe('assertIsValidGoogleToken', () => {
+    it('returns the payload for a valid Google token', async () => {
+      const payload = { sub: 'google-1', email: 'user@example.com' };
+      vi.mocked(googleService.verify).mockResolvedValue(payload as never);
+
+      await expect(assertIsValidGoogleToken('valid-token')).resolves.toEqual(
+        payload,
+      );
+    });
+
+    it('throws UnauthorizedError when googleService.verify resolves to null', async () => {
+      vi.mocked(googleService.verify).mockResolvedValue(null as never);
+
+      await expect(
+        assertIsValidGoogleToken('token-with-no-payload'),
+      ).rejects.toBeInstanceOf(UnauthorizedError);
+    });
+
+    // Regression test: googleService.verify *rejects* (rather than
+    // resolving to null) for an invalid, expired, or wrong-audience
+    // Google id_token. Previously that rejection was left uncaught here
+    // and bubbled to the error middleware as an unhandled 500, instead of
+    // the expected 401 for what is really an authentication failure.
+    it('throws UnauthorizedError (not the raw error) when googleService.verify rejects on an invalid token', async () => {
+      vi.mocked(googleService.verify).mockRejectedValue(
+        new Error('Wrong number of segments in token'),
+      );
+
+      await expect(
+        assertIsValidGoogleToken('not-a-jwt'),
+      ).rejects.toBeInstanceOf(UnauthorizedError);
+    });
+
+    it('throws UnauthorizedError when googleService.verify rejects on an expired token', async () => {
+      vi.mocked(googleService.verify).mockRejectedValue(
+        new Error('Token used too late'),
+      );
+
+      await expect(
+        assertIsValidGoogleToken('expired-token'),
+      ).rejects.toBeInstanceOf(UnauthorizedError);
+    });
+
+    it('throws UnauthorizedError when googleService.verify rejects on a wrong-audience token', async () => {
+      vi.mocked(googleService.verify).mockRejectedValue(
+        new Error('Wrong recipient, payload audience != requiredAudience'),
+      );
+
+      await expect(
+        assertIsValidGoogleToken('token-for-another-client'),
+      ).rejects.toBeInstanceOf(UnauthorizedError);
     });
   });
 
