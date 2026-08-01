@@ -56,8 +56,10 @@ describe('refreshTokenService', () => {
     resetStore();
     redisStore.clear();
 
-    vi.mocked(redis.get).mockImplementation((async (key: string) =>
-      redisStore.get(key) ?? null) as unknown as typeof redis.get);
+    vi.mocked(redis.get).mockImplementation(
+      (async (key: string) =>
+        redisStore.get(key) ?? null) as unknown as typeof redis.get,
+    );
     vi.mocked(redis.set).mockImplementation((async (
       key: string,
       value: string,
