@@ -149,7 +149,10 @@ export const userController = {
         userId: user.id,
         type: 'ACTIVATION',
       });
-      await mailer.sendActivationEmail(user.email, rawToken);
+      await mailer.sendSafely(
+        () => mailer.sendActivationEmail(user.email, rawToken),
+        { event: 'update_email_activation_email', userId: user.id },
+      );
     }
 
     res.status(200).send(stabilizeUser(user));
