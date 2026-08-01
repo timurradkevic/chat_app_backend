@@ -175,6 +175,8 @@ export const userController = {
 
     await userService.delete(id);
 
+    disconnectUserSockets(id);
+
     res.sendStatus(204);
   },
 

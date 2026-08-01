@@ -8,6 +8,7 @@ import { tokenService } from '../services/token.service.js';
 import { mailer } from '../utils/email.js';
 import { prisma } from '../lib/prisma.js';
 import { logger } from '../lib/logger.js';
+import { disconnectUserSockets } from '../lib/socket.js';
 import {
   assertIsCorrectEmailAndPassword,
   assertIsConfirmedEmail,
@@ -297,6 +298,21 @@ describe('userController', () => {
       expect(assertHasNoOwnedRooms).toHaveBeenCalledWith('user-1');
       expect(userService.delete).toHaveBeenCalledWith('user-1');
       expect(res.sendStatus).toHaveBeenCalledWith(204);
+    });
+
+    // Regression test: previously delete() did not disconnect the deleted
+    // user's active sockets (unlike logoutAll/updatePassword/
+    // confirmPasswordReset), so an already-open connection stayed alive
+    // until it naturally dropped.
+    it('disconnects the deleted user’s active sockets', async () => {
+      const user = makeUser({ id: 'user-1' });
+      const req = makeReq({ user: { ...user, sessionId: 'session-1' } });
+      const res = makeRes();
+      vi.mocked(assertHasNoOwnedRooms).mockResolvedValue(undefined);
+
+      await userController.delete(req, res, next);
+
+      expect(disconnectUserSockets).toHaveBeenCalledWith('user-1');
     });
 
     it('propagates the error and never deletes when the user still owns rooms', async () => {
