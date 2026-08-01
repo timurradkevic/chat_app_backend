@@ -2,7 +2,21 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { createHash } from 'node:crypto';
 import { refreshTokenService } from './refreshToken.service.js';
 import { prisma } from '../lib/prisma.js';
+import { redis } from '../lib/redis.js';
 import type { RefreshToken } from '../generated/prisma/client.js';
+
+// The grace-period retry cache lives in Redis (see refreshToken.service.ts),
+// so we fake just a get/set/del pair backed by an in-memory Map — enough to
+// exercise the idempotent-retry behavior without a live connection.
+const redisStore = new Map<string, string>();
+
+vi.mock('../lib/redis.js', () => ({
+  redis: {
+    get: vi.fn(),
+    set: vi.fn(),
+    del: vi.fn(),
+  },
+}));
 
 vi.mock('../lib/prisma.js', () => ({
   prisma: {
@@ -40,6 +54,21 @@ describe('refreshTokenService', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     resetStore();
+    redisStore.clear();
+
+    vi.mocked(redis.get).mockImplementation((async (key: string) =>
+      redisStore.get(key) ?? null) as unknown as typeof redis.get);
+    vi.mocked(redis.set).mockImplementation((async (
+      key: string,
+      value: string,
+    ) => {
+      redisStore.set(key, value);
+      return 'OK';
+    }) as unknown as typeof redis.set);
+    vi.mocked(redis.del).mockImplementation((async (key: string) => {
+      const existed = redisStore.delete(key);
+      return existed ? 1 : 0;
+    }) as unknown as typeof redis.del);
 
     vi.mocked(prisma.refreshToken.create).mockImplementation((async ({
       data,
@@ -294,15 +323,52 @@ describe('refreshTokenService', () => {
       expect(rows[0]?.userId).toBe('user-2');
     });
 
-    it('tolerates reuse within the grace period (treats as retry)', async () => {
+    it('tolerates reuse within the grace period by replaying the same child token (treats as retry)', async () => {
+      const { rawToken } = await refreshTokenService.create('user-1');
+      const first = await refreshTokenService.verifyAndRotate(rawToken);
+
+      // immediately retry with the same (now-spent) rawToken
+      const second = await refreshTokenService.verifyAndRotate(rawToken);
+
+      expect(second).not.toBe('reused');
+      expect(second).not.toBeNull();
+
+      // Regression check for the reuse-detection bypass: a grace-period
+      // retry must return the SAME child token that was already minted,
+      // not mint an independent new one.
+      expect((second as { rawToken: string }).rawToken).toBe(
+        (first as { rawToken: string }).rawToken,
+      );
+
+      // And it must not create a second child row in the family.
+      expect(rows).toHaveLength(2); // original spent parent + single child
+    });
+
+    it('does not reset usedAt on the spent parent when a grace-period retry occurs', async () => {
       const { rawToken } = await refreshTokenService.create('user-1');
       await refreshTokenService.verifyAndRotate(rawToken);
 
-      // immediately retry with the same (now-spent) rawToken
+      const spentRow = rows.find((r) => r.usedAt !== null);
+      const usedAtAfterFirstRotation = spentRow?.usedAt;
+      expect(usedAtAfterFirstRotation).toBeDefined();
+
+      await refreshTokenService.verifyAndRotate(rawToken);
+
+      const spentRowAfterRetry = rows.find((r) => r.usedAt !== null);
+      expect(spentRowAfterRetry?.usedAt).toEqual(usedAtAfterFirstRotation);
+    });
+
+    it('fails closed (revokes the family) if a grace-period retry has no cached rotation result', async () => {
+      const { rawToken } = await refreshTokenService.create('user-1');
+      await refreshTokenService.verifyAndRotate(rawToken);
+
+      // simulate the retry cache having expired/being unavailable
+      redisStore.clear();
+
       const result = await refreshTokenService.verifyAndRotate(rawToken);
 
-      expect(result).not.toBe('reused');
-      expect(result).not.toBeNull();
+      expect(result).toBe('reused');
+      expect(rows).toHaveLength(0);
     });
   });
 });
