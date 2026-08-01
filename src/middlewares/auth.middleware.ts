@@ -18,7 +18,7 @@ export const authMiddleware = async (
   }
 
   try {
-    const { userId, tokenVersion } = jwtService.verify(token);
+    const { userId, tokenVersion, sessionId } = jwtService.verify(token);
     const user = await userService.getOneById(userId);
     if (!user) {
       throw new UnauthorizedError('User not found');
@@ -30,6 +30,7 @@ export const authMiddleware = async (
       id: user.id,
       email: user.email,
       name: user.name,
+      sessionId,
     };
   } catch (error) {
     if (error instanceof JsonWebTokenError) {

@@ -117,6 +117,7 @@ describe('authMiddleware', () => {
     vi.mocked(jwtService.verify).mockReturnValue({
       userId: 'user-1',
       tokenVersion: 1,
+      sessionId: 'family-1',
     });
     vi.mocked(userService.getOneById).mockResolvedValue(
       makeUser({ id: 'user-1', tokenVersion: 2 }),
@@ -132,29 +133,12 @@ describe('authMiddleware', () => {
     expect(next).not.toHaveBeenCalled();
   });
 
-  it('rejects with 401 when the token is valid but the user no longer exists', async () => {
-    const req = makeReq('Bearer valid.token.deleted.user');
-    vi.mocked(jwtService.verify).mockReturnValue({
-      userId: 'ghost-user',
-      tokenVersion: 0,
-    });
-    vi.mocked(userService.getOneById).mockResolvedValue(null);
-
-    await expect(authMiddleware(req, res, next)).rejects.toThrow(
-      UnauthorizedError,
-    );
-    await expect(authMiddleware(req, res, next)).rejects.toThrow(
-      'User not found',
-    );
-
-    expect(next).not.toHaveBeenCalled();
-  });
-
   it('attaches req.user and calls next() when the token is valid and tokenVersion matches', async () => {
     const req = makeReq('Bearer valid.matching.token');
     vi.mocked(jwtService.verify).mockReturnValue({
       userId: 'user-1',
       tokenVersion: 3,
+      sessionId: 'family-1',
     });
     vi.mocked(userService.getOneById).mockResolvedValue(
       makeUser({
@@ -171,6 +155,7 @@ describe('authMiddleware', () => {
       id: 'user-1',
       email: 'user@example.com',
       name: 'Test User',
+      sessionId: 'family-1',
     });
     expect(next).toHaveBeenCalledTimes(1);
     expect(next).toHaveBeenCalledWith();

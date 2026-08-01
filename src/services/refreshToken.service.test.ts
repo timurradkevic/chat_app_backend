@@ -158,11 +158,19 @@ describe('refreshTokenService', () => {
       expect(rows[0]?.familyId).toBeTruthy();
       expect(rows[0]?.usedAt).toBeNull();
     });
+
+    it('returns the familyId alongside the raw token', async () => {
+      const { rawToken, familyId } = await refreshTokenService.create('user-1');
+
+      expect(rawToken).toBeTruthy();
+      expect(familyId).toBeTruthy();
+      expect(rows[0]?.familyId).toBe(familyId);
+    });
   });
 
   describe('verifyAndRotate', () => {
     it('rotates a valid token: returns a new raw token, and the old tokenHash is no longer findable', async () => {
-      const rawToken = await refreshTokenService.create('user-1');
+      const { rawToken } = await refreshTokenService.create('user-1');
       const oldTokenHash = hash(rawToken);
       expect(rows.find((r) => r.tokenHash === oldTokenHash)).toBeDefined();
 
@@ -191,8 +199,16 @@ describe('refreshTokenService', () => {
       expect(newRow?.familyId).toBe(oldRow?.familyId);
     });
 
+    it('returns the familyId of the rotated token', async () => {
+      const { rawToken, familyId } = await refreshTokenService.create('user-1');
+
+      const result = await refreshTokenService.verifyAndRotate(rawToken);
+
+      expect((result as { familyId: string }).familyId).toBe(familyId);
+    });
+
     it("returns 'expired' for a token whose expiredTime is in the past", async () => {
-      const rawToken = await refreshTokenService.create('user-1');
+      const { rawToken } = await refreshTokenService.create('user-1');
       const tokenHash = hash(rawToken);
       const row = rows.find((r) => r.tokenHash === tokenHash);
       if (!row) throw new Error('setup failed: token row not found');
@@ -245,7 +261,7 @@ describe('refreshTokenService', () => {
 
   describe('reuse detection', () => {
     it('detects reuse after grace period and revokes the whole family', async () => {
-      const rawToken = await refreshTokenService.create('user-1');
+      const { rawToken } = await refreshTokenService.create('user-1');
       const rotated = await refreshTokenService.verifyAndRotate(rawToken);
       expect(rotated).not.toBeNull();
 
@@ -261,7 +277,7 @@ describe('refreshTokenService', () => {
     });
 
     it('does not affect other users/families when revoking a reused family', async () => {
-      const rawToken = await refreshTokenService.create('user-1');
+      const { rawToken } = await refreshTokenService.create('user-1');
       await refreshTokenService.create('user-2'); // unrelated family
       await refreshTokenService.verifyAndRotate(rawToken);
 
@@ -279,7 +295,7 @@ describe('refreshTokenService', () => {
     });
 
     it('tolerates reuse within the grace period (treats as retry)', async () => {
-      const rawToken = await refreshTokenService.create('user-1');
+      const { rawToken } = await refreshTokenService.create('user-1');
       await refreshTokenService.verifyAndRotate(rawToken);
 
       // immediately retry with the same (now-spent) rawToken

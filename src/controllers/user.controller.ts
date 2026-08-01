@@ -183,11 +183,6 @@ export const userController = {
 
     assertIsConfirmedEmail(user);
 
-    const token = jwtService.sign({
-      userId: user.id,
-      tokenVersion: user.tokenVersion,
-    });
-
     const metadata = {
       ...(req.headers['user-agent'] && {
         userAgent: req.headers['user-agent'],
@@ -197,7 +192,14 @@ export const userController = {
       }),
     };
 
-    const refreshToken = await refreshTokenService.create(user.id, metadata);
+    const { rawToken: refreshToken, familyId } =
+      await refreshTokenService.create(user.id, metadata);
+
+    const token = jwtService.sign({
+      userId: user.id,
+      tokenVersion: user.tokenVersion,
+      sessionId: familyId,
+    });
 
     res.status(200).send({ accessToken: token, refreshToken });
   },
@@ -215,27 +217,26 @@ export const userController = {
 
     assertIsEmailVerified(email_verified);
 
+    const metadata = {
+      ...(req.headers['user-agent'] && {
+        userAgent: req.headers['user-agent'],
+      }),
+      ...(req.ip && {
+        ipAddress: req.ip,
+      }),
+    };
+
     const userByGoogleId = await userService.getOneByGoogleId(sub);
 
     if (userByGoogleId) {
+      const { rawToken: refreshToken, familyId } =
+        await refreshTokenService.create(userByGoogleId.id, metadata);
+
       const token = jwtService.sign({
         userId: userByGoogleId.id,
         tokenVersion: userByGoogleId.tokenVersion,
+        sessionId: familyId,
       });
-
-      const metadata = {
-        ...(req.headers['user-agent'] && {
-          userAgent: req.headers['user-agent'],
-        }),
-        ...(req.ip && {
-          ipAddress: req.ip,
-        }),
-      };
-
-      const refreshToken = await refreshTokenService.create(
-        userByGoogleId.id,
-        metadata,
-      );
 
       res.status(200).send({ accessToken: token, refreshToken });
     } else {
@@ -245,48 +246,28 @@ export const userController = {
         // Auto-linking Google account by verified email — Google's email_verified already proves ownership, so this is safe
         await userService.linkGoogleId(userByEmail.id, sub);
 
+        const { rawToken: refreshToken, familyId } =
+          await refreshTokenService.create(userByEmail.id, metadata);
+
         const token = jwtService.sign({
           userId: userByEmail.id,
           tokenVersion: userByEmail.tokenVersion,
+          sessionId: familyId,
         });
-
-        const metadata = {
-          ...(req.headers['user-agent'] && {
-            userAgent: req.headers['user-agent'],
-          }),
-          ...(req.ip && {
-            ipAddress: req.ip,
-          }),
-        };
-
-        const refreshToken = await refreshTokenService.create(
-          userByEmail.id,
-          metadata,
-        );
 
         res.status(200).send({ accessToken: token, refreshToken });
       } else {
         const userData = { name, email, googleId: sub };
         const createdUser = await userService.createFromGoogle(userData);
 
+        const { rawToken: refreshToken, familyId } =
+          await refreshTokenService.create(createdUser.id, metadata);
+
         const token = jwtService.sign({
           userId: createdUser.id,
           tokenVersion: createdUser.tokenVersion,
+          sessionId: familyId,
         });
-
-        const metadata = {
-          ...(req.headers['user-agent'] && {
-            userAgent: req.headers['user-agent'],
-          }),
-          ...(req.ip && {
-            ipAddress: req.ip,
-          }),
-        };
-
-        const refreshToken = await refreshTokenService.create(
-          createdUser.id,
-          metadata,
-        );
 
         res.status(200).send({ accessToken: token, refreshToken });
       }
@@ -303,6 +284,7 @@ export const userController = {
     const token = jwtService.sign({
       userId: user.id,
       tokenVersion: user.tokenVersion,
+      sessionId: result.familyId,
     });
 
     res.status(200).send({ accessToken: token, refreshToken: result.rawToken });
@@ -403,5 +385,18 @@ export const userController = {
     await refreshTokenService.revokeAllForUser(id);
 
     res.sendStatus(204);
+  },
+
+  async getSessions(req: Request, res: Response, next: NextFunction) {
+    const { id, sessionId } = req.user;
+
+    const sessions = await refreshTokenService.listSessions(id);
+
+    const formattedSessions = sessions.map(({ familyId, ...session }) => ({
+      ...session,
+      isCurrent: familyId === sessionId,
+    }));
+
+    res.status(200).send(formattedSessions);
   },
 };

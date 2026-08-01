@@ -15,6 +15,8 @@ export const refreshTokenService = {
     const expiredTime = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 days
     const rawToken = randomBytes(32).toString('hex');
     const tokenHash = createHash('sha256').update(rawToken).digest('hex');
+    const finalFamilyId =
+      familyId ?? createHash('sha256').update(rawToken).digest('hex');
 
     const deviceLabel = meta?.userAgent?.substring(0, 255) ?? 'Unknown device';
 
@@ -25,12 +27,12 @@ export const refreshTokenService = {
         expiredTime,
         ...meta,
         deviceLabel,
-        familyId:
-          familyId ?? createHash('sha256').update(rawToken).digest('hex'),
+        familyId: finalFamilyId,
+        lastUsedAt: new Date(),
       },
     });
 
-    return rawToken;
+    return { rawToken, familyId: finalFamilyId };
   },
 
   async verifyAndRotate(rawToken: string) {
@@ -81,7 +83,11 @@ export const refreshTokenService = {
       }),
     ]);
 
-    return { rawToken: newRawToken, userId: token.userId };
+    return {
+      rawToken: newRawToken,
+      userId: token.userId,
+      familyId: token.familyId,
+    };
   },
 
   async findByRawToken(rawToken: string) {
@@ -102,6 +108,7 @@ export const refreshTokenService = {
       where: { userId, usedAt: null },
       select: {
         id: true,
+        familyId: true,
         deviceLabel: true,
         ipAddress: true,
         userAgent: true,

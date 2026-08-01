@@ -8,7 +8,7 @@ if (!JWT_SECRET) {
 
 const JWT_EXPIRES_IN = '15m'; // 15 minutes
 
-type JwtPayload = { userId: string; tokenVersion: number };
+type JwtPayload = { userId: string; tokenVersion: number; sessionId: string };
 
 export const jwtService = {
   sign(payload: JwtPayload) {
