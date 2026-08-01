@@ -328,7 +328,6 @@ describe('roomController', () => {
 
   describe('leave', () => {
     it('removes the requester from the room and responds 204', async () => {
-      vi.mocked(assertIsUser).mockResolvedValue({} as never);
       vi.mocked(assertIsRoom).mockResolvedValue(makeRoom());
       vi.mocked(assertIsUserInRoom).mockResolvedValue(undefined);
       vi.mocked(assertIsOwnerTryingToLeave).mockResolvedValue(undefined);
@@ -341,6 +340,7 @@ describe('roomController', () => {
 
       await roomController.leave(req, res, next);
 
+      expect(assertIsUser).not.toHaveBeenCalled();
       expect(assertIsUserInRoom).toHaveBeenCalledWith('user-1', 'room-1');
       expect(assertIsOwnerTryingToLeave).toHaveBeenCalledWith(
         'user-1',
@@ -351,7 +351,6 @@ describe('roomController', () => {
     });
 
     it('blocks the owner from leaving without transferring ownership first', async () => {
-      vi.mocked(assertIsUser).mockResolvedValue({} as never);
       vi.mocked(assertIsRoom).mockResolvedValue(makeRoom());
       vi.mocked(assertIsUserInRoom).mockResolvedValue(undefined);
       vi.mocked(assertIsOwnerTryingToLeave).mockRejectedValue(
@@ -373,7 +372,6 @@ describe('roomController', () => {
     });
 
     it('rejects leaving a room the user is not a member of', async () => {
-      vi.mocked(assertIsUser).mockResolvedValue({} as never);
       vi.mocked(assertIsRoom).mockResolvedValue(makeRoom());
       vi.mocked(assertIsUserInRoom).mockRejectedValue(
         new Error('User is not a member of this room'),
