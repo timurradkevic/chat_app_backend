@@ -5,6 +5,7 @@ import { userService } from '../services/user.service.js';
 import type { User } from '../generated/prisma/client.js';
 import { tokenService } from '../services/token.service.js';
 import { googleService } from './google.js';
+import { refreshTokenService } from '../services/refreshToken.service.js';
 
 export class ForbiddenError extends Error {
   constructor(message = 'Forbidden') {
@@ -216,6 +217,24 @@ export async function assertIsValidToken(rawToken: string, type: TokenTypes) {
   }
   if (!token) {
     throw new UnauthorizedError('Invalid token');
+  }
+
+  return token;
+}
+
+export async function assertIsValidRefreshToken(rawToken: string) {
+  const token = await refreshTokenService.verifyAndRotate(rawToken);
+
+  if (token === 'reused') {
+    throw new UnauthorizedError(
+      'Refresh token reuse detected — all sessions revoked, please log in again',
+    );
+  }
+  if (token === 'expired') {
+    throw new GoneError('Refresh token has expired');
+  }
+  if (!token) {
+    throw new UnauthorizedError('Invalid refresh token');
   }
 
   return token;

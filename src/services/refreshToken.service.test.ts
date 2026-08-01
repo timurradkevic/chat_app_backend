@@ -14,6 +14,9 @@ vi.mock('../lib/prisma.js', () => ({
       deleteMany: vi.fn(),
       findMany: vi.fn(),
     },
+    // Rotation marks the old row used and creates the new row inside one
+    // transaction, so both must be awaited together here too.
+    $transaction: vi.fn(async (ops: Promise<unknown>[]) => Promise.all(ops)),
   },
 }));
 
@@ -45,6 +48,7 @@ describe('refreshTokenService', () => {
         userId: string;
         tokenHash: string;
         expiredTime: Date;
+        familyId: string;
       };
     }) => {
       const row = {
@@ -57,6 +61,11 @@ describe('refreshTokenService', () => {
           (data as unknown as { ipAddress?: string }).ipAddress ?? null,
         deviceLabel: data.deviceLabel ?? null,
         lastUsedAt: data.lastUsedAt ?? null,
+        // A token is "unused" until it's rotated away, so it starts as
+        // null rather than undefined — the service checks this field to
+        // tell a fresh token apart from one that's already been spent.
+        familyId: data.familyId,
+        usedAt: (data as unknown as { usedAt?: Date }).usedAt ?? null,
         createdAt: new Date(),
         updatedAt: new Date(),
       } as unknown as RefreshToken;
@@ -102,13 +111,20 @@ describe('refreshTokenService', () => {
       return removed;
     }) as unknown as typeof prisma.refreshToken.delete);
 
+    // deleteMany is used for two different scopes: wiping every session
+    // for a user (revokeAllForUser), and wiping just one token family
+    // (reuse detection) — the mock needs to honor whichever was passed.
     vi.mocked(prisma.refreshToken.deleteMany).mockImplementation((async ({
       where,
     }: {
-      where: { userId: string };
+      where: { userId?: string; familyId?: string };
     }) => {
       const before = rows.length;
-      rows = rows.filter((r) => r.userId !== where.userId);
+      rows = rows.filter((r) => {
+        if (where.familyId !== undefined) return r.familyId !== where.familyId;
+        if (where.userId !== undefined) return r.userId !== where.userId;
+        return true;
+      });
       return { count: before - rows.length };
     }) as unknown as typeof prisma.refreshToken.deleteMany);
   });
@@ -134,6 +150,14 @@ describe('refreshTokenService', () => {
       const hashes = new Set(rows.map((r) => r.tokenHash));
       expect(hashes.size).toBe(rows.length);
     });
+
+    it('assigns a fresh familyId with usedAt null for a brand-new login', async () => {
+      await refreshTokenService.create('user-1');
+
+      expect(rows).toHaveLength(1);
+      expect(rows[0]?.familyId).toBeTruthy();
+      expect(rows[0]?.usedAt).toBeNull();
+    });
   });
 
   describe('verifyAndRotate', () => {
@@ -146,16 +170,25 @@ describe('refreshTokenService', () => {
 
       expect(result).not.toBeNull();
       expect(result).not.toBe('expired');
-      expect(typeof result).toBe('string');
-      expect(result).not.toBe(rawToken);
+      expect(result).not.toBe('reused');
+      expect(typeof result).toBe('object');
+      expect((result as { rawToken: string }).rawToken).not.toBe(rawToken);
 
-      // Old token hash must no longer be present in the store.
-      expect(rows.find((r) => r.tokenHash === oldTokenHash)).toBeUndefined();
+      // Old token row must still exist (now marked as spent), but its hash
+      // is no longer usable to authenticate — only the new one is.
+      const oldRow = rows.find((r) => r.tokenHash === oldTokenHash);
+      expect(oldRow).toBeDefined();
+      expect(oldRow?.usedAt).not.toBeNull();
 
       // New token hash must be findable and verifiable.
-      const newRawToken = result as string;
+      const { rawToken: newRawToken } = result as { rawToken: string };
       const newTokenHash = hash(newRawToken);
-      expect(rows.find((r) => r.tokenHash === newTokenHash)).toBeDefined();
+      const newRow = rows.find((r) => r.tokenHash === newTokenHash);
+      expect(newRow).toBeDefined();
+      expect(newRow?.usedAt).toBeNull();
+
+      // Both rows belong to the same family.
+      expect(newRow?.familyId).toBe(oldRow?.familyId);
     });
 
     it("returns 'expired' for a token whose expiredTime is in the past", async () => {
@@ -207,6 +240,53 @@ describe('refreshTokenService', () => {
 
       expect(rows).toHaveLength(1);
       expect(rows.every((r) => r.userId === 'user-2')).toBe(true);
+    });
+  });
+
+  describe('reuse detection', () => {
+    it('detects reuse after grace period and revokes the whole family', async () => {
+      const rawToken = await refreshTokenService.create('user-1');
+      const rotated = await refreshTokenService.verifyAndRotate(rawToken);
+      expect(rotated).not.toBeNull();
+
+      // simulate grace period having passed
+      const spentRow = rows.find((r) => r.usedAt !== null);
+      if (spentRow) spentRow.usedAt = new Date(Date.now() - 20_000);
+
+      const result = await refreshTokenService.verifyAndRotate(rawToken);
+
+      expect(result).toBe('reused');
+      // entire family gone, including the freshly-rotated token
+      expect(rows).toHaveLength(0);
+    });
+
+    it('does not affect other users/families when revoking a reused family', async () => {
+      const rawToken = await refreshTokenService.create('user-1');
+      await refreshTokenService.create('user-2'); // unrelated family
+      await refreshTokenService.verifyAndRotate(rawToken);
+
+      const spentRow = rows.find(
+        (r) => r.userId === 'user-1' && r.usedAt !== null,
+      );
+      if (spentRow) spentRow.usedAt = new Date(Date.now() - 20_000);
+
+      const result = await refreshTokenService.verifyAndRotate(rawToken);
+
+      expect(result).toBe('reused');
+      // user-1's family is gone, user-2's row is untouched
+      expect(rows).toHaveLength(1);
+      expect(rows[0]?.userId).toBe('user-2');
+    });
+
+    it('tolerates reuse within the grace period (treats as retry)', async () => {
+      const rawToken = await refreshTokenService.create('user-1');
+      await refreshTokenService.verifyAndRotate(rawToken);
+
+      // immediately retry with the same (now-spent) rawToken
+      const result = await refreshTokenService.verifyAndRotate(rawToken);
+
+      expect(result).not.toBe('reused');
+      expect(result).not.toBeNull();
     });
   });
 });

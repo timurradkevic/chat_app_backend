@@ -82,3 +82,14 @@ export const passwordResetEmailRateLimitMiddleware = rateLimit({
   standardHeaders: 'draft-8',
   legacyHeaders: false,
 });
+
+export const refreshRateLimitMiddleware = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  skipSuccessfulRequests: true,
+  store: createRedisStore(),
+  standardHeaders: 'draft-8',
+  legacyHeaders: false,
+  ipv6Subnet: 56,
+  max: 30,
+  message: 'Too many refresh attempts, please try again later',
+});

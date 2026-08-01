@@ -8,6 +8,7 @@ import {
   loginRateLimitMiddleware,
   passwordResetEmailRateLimitMiddleware,
   passwordResetIpRateLimitMiddleware,
+  refreshRateLimitMiddleware,
   registerRateLimitMiddleware,
 } from '../middlewares/rateLimit.middleware.js';
 
@@ -53,6 +54,11 @@ userRouter.post(
   catchError(activationIpRateLimitMiddleware),
   catchError(activationEmailRateLimitMiddleware),
   catchError(userController.resendActivation),
+);
+userRouter.post(
+  '/refresh',
+  catchError(refreshRateLimitMiddleware),
+  catchError(userController.refresh),
 );
 userRouter.post(
   '/password-reset',

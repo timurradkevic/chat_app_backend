@@ -11,6 +11,7 @@ import {
   assertIsConfirmedEmail,
   assertIsValidGoogleToken,
   assertIsEmailVerified,
+  assertIsValidRefreshToken,
 } from '../utils/checks.js';
 import type { User } from '../generated/prisma/client.js';
 import { jwtService } from '../utils/jwt.js';
@@ -58,6 +59,8 @@ const LoginData = z.object({
   email: z.email(),
   password: z.string(),
 });
+
+const RefreshTokenData = z.object({ refreshToken: z.string() });
 
 const GoogleLoginData = z.object({
   idToken: z.string(),
@@ -173,7 +176,10 @@ export const userController = {
 
     assertIsConfirmedEmail(user);
 
-    const token = jwtService.sign({ userId: user.id, tokenVersion: user.tokenVersion });
+    const token = jwtService.sign({
+      userId: user.id,
+      tokenVersion: user.tokenVersion,
+    });
 
     const metadata = {
       ...(req.headers['user-agent'] && {
@@ -205,7 +211,10 @@ export const userController = {
     const userByGoogleId = await userService.getOneByGoogleId(sub);
 
     if (userByGoogleId) {
-      const token = jwtService.sign({ userId: userByGoogleId.id, tokenVersion: userByGoogleId.tokenVersion });
+      const token = jwtService.sign({
+        userId: userByGoogleId.id,
+        tokenVersion: userByGoogleId.tokenVersion,
+      });
 
       const metadata = {
         ...(req.headers['user-agent'] && {
@@ -216,7 +225,10 @@ export const userController = {
         }),
       };
 
-      const refreshToken = await refreshTokenService.create(userByGoogleId.id, metadata);
+      const refreshToken = await refreshTokenService.create(
+        userByGoogleId.id,
+        metadata,
+      );
 
       res.status(200).send({ accessToken: token, refreshToken });
     } else {
@@ -226,7 +238,10 @@ export const userController = {
         // Auto-linking Google account by verified email — Google's email_verified already proves ownership, so this is safe
         await userService.linkGoogleId(userByEmail.id, sub);
 
-        const token = jwtService.sign({ userId: userByEmail.id, tokenVersion: userByEmail.tokenVersion });
+        const token = jwtService.sign({
+          userId: userByEmail.id,
+          tokenVersion: userByEmail.tokenVersion,
+        });
 
         const metadata = {
           ...(req.headers['user-agent'] && {
@@ -237,14 +252,20 @@ export const userController = {
           }),
         };
 
-        const refreshToken = await refreshTokenService.create(userByEmail.id, metadata);
+        const refreshToken = await refreshTokenService.create(
+          userByEmail.id,
+          metadata,
+        );
 
         res.status(200).send({ accessToken: token, refreshToken });
       } else {
         const userData = { name, email, googleId: sub };
         const createdUser = await userService.createFromGoogle(userData);
 
-        const token = jwtService.sign({ userId: createdUser.id, tokenVersion: createdUser.tokenVersion });
+        const token = jwtService.sign({
+          userId: createdUser.id,
+          tokenVersion: createdUser.tokenVersion,
+        });
 
         const metadata = {
           ...(req.headers['user-agent'] && {
@@ -255,11 +276,29 @@ export const userController = {
           }),
         };
 
-        const refreshToken = await refreshTokenService.create(createdUser.id, metadata);
+        const refreshToken = await refreshTokenService.create(
+          createdUser.id,
+          metadata,
+        );
 
         res.status(200).send({ accessToken: token, refreshToken });
       }
     }
+  },
+
+  async refresh(req: Request, res: Response, next: NextFunction) {
+    const { refreshTokenData } = req.body;
+    const verifiedData = RefreshTokenData.parse(refreshTokenData);
+
+    const result = await assertIsValidRefreshToken(verifiedData.refreshToken);
+    const user = await assertIsUser(result.userId);
+
+    const token = jwtService.sign({
+      userId: user.id,
+      tokenVersion: user.tokenVersion,
+    });
+
+    res.status(200).send({ accessToken: token, refreshToken: result.rawToken });
   },
 
   async activate(
