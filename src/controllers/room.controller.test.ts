@@ -465,6 +465,8 @@ describe('roomController', () => {
         'admin-1',
         'user-1',
         'room-1',
+        undefined,
+        'remove_member',
       );
       expect(roomService.removeUser).toHaveBeenCalledWith('room-1', 'user-1');
       expect(res.sendStatus).toHaveBeenCalledWith(204);

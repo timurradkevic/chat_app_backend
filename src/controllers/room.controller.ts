@@ -205,7 +205,7 @@ export const roomController = {
 
     await assertIsUserInRoom(userId, roomId);
 
-    await assertHasHigherRole(id, userId, roomId);
+    await assertHasHigherRole(id, userId, roomId, undefined, 'remove_member');
 
     await roomService.removeUser(roomId, userId);
 

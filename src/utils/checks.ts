@@ -111,14 +111,23 @@ export function assertIsAuthor(userId: string, authorId: string) {
   }
 }
 
+type HigherRoleAction = 'change_role' | 'remove_member';
+
+const HIGHER_ROLE_ACTION_LABEL: Record<HigherRoleAction, string> = {
+  change_role: 'change member roles',
+  remove_member: 'remove members',
+};
+
 export async function assertHasHigherRole(
   actorId: string,
   targetId: string,
   roomId: string,
   newRole?: Role,
+  action: HigherRoleAction = 'change_role',
 ): Promise<void> {
   const targetRole = await roomService.getMemberRole(targetId, roomId);
   const actorRole = await roomService.getMemberRole(actorId, roomId);
+  const actionLabel = HIGHER_ROLE_ACTION_LABEL[action];
 
   if (newRole === 'OWNER') {
     throw new ForbiddenError(
@@ -127,17 +136,23 @@ export async function assertHasHigherRole(
   }
 
   if (actorRole !== 'ADMIN' && actorRole !== 'OWNER') {
-    throw new ForbiddenError(
-      'Only admins or the owner can change member roles',
-    );
+    throw new ForbiddenError(`Only admins or the owner can ${actionLabel}`);
   }
 
   if (targetRole === 'OWNER') {
-    throw new ForbiddenError('Cannot change the role of the room owner');
+    throw new ForbiddenError(
+      action === 'remove_member'
+        ? 'Cannot remove the room owner'
+        : 'Cannot change the role of the room owner',
+    );
   }
 
   if (targetRole === 'ADMIN' && actorRole !== 'OWNER') {
-    throw new ForbiddenError("Only the owner can change an admin's role");
+    throw new ForbiddenError(
+      action === 'remove_member'
+        ? 'Only the owner can remove an admin'
+        : "Only the owner can change an admin's role",
+    );
   }
 
   if (actorRole !== 'OWNER' && newRole === 'ADMIN') {
@@ -288,6 +303,10 @@ export async function assertIsValidGoogleToken(googleToken: string) {
   return token;
 }
 
+// Accepts an optional transaction client so the caller can run this check
+// in the same transaction as the actual deletion. Without that, a room
+// could be created by the user between the check and the delete
+// (TOCTOU), since the two operations wouldn't be atomic.
 export async function assertHasNoOwnedRooms(userId: string, tx: Tx = prisma) {
   const hasOwnedRoom = await roomService.hasOwnedRoom(userId, tx);
   if (hasOwnedRoom) {
