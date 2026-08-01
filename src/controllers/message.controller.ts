@@ -16,6 +16,7 @@ import { messageEmitter } from '../lib/messageEmmiter.js';
 const CreateMessageData = z.object({
   content: z
     .string()
+    .trim()
     .min(1, 'Message content cannot be empty')
     .max(4000, 'Message content cannot exceed 4000 characters'),
   roomId: z.string(),
@@ -24,6 +25,7 @@ const CreateMessageData = z.object({
 const UpdateMessageData = z.object({
   content: z
     .string()
+    .trim()
     .min(1, 'Message content cannot be empty')
     .max(4000, 'Message content cannot exceed 4000 characters'),
 });
