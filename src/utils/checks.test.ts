@@ -48,6 +48,7 @@ function makeUser(overrides: Partial<User> = {}): User {
     password: 'hashed',
     confirmedEmail: false,
     googleId: null,
+    tokenVersion: 0,
     createdAt: new Date(),
     updatedAt: new Date(),
     ...overrides,

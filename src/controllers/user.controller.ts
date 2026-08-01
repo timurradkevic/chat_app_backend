@@ -16,6 +16,7 @@ import type { User } from '../generated/prisma/client.js';
 import { jwtService } from '../utils/jwt.js';
 import { tokenService } from '../services/token.service.js';
 import { mailer } from '../utils/email.js';
+import { refreshTokenService } from '../services/refreshToken.service.js';
 
 const stabilizeUser = (user: User) => {
   const { password, ...userWithoutPass } = user;
@@ -172,9 +173,20 @@ export const userController = {
 
     assertIsConfirmedEmail(user);
 
-    const token = jwtService.sign({ userId: user.id });
+    const token = jwtService.sign({ userId: user.id, tokenVersion: user.tokenVersion });
 
-    res.status(200).send({ token });
+    const metadata = {
+      ...(req.headers['user-agent'] && {
+        userAgent: req.headers['user-agent'],
+      }),
+      ...(req.ip && {
+        ipAddress: req.ip,
+      }),
+    };
+
+    const refreshToken = await refreshTokenService.create(user.id, metadata);
+
+    res.status(200).send({ accessToken: token, refreshToken });
   },
 
   async loginWithGoogle(req: Request, res: Response, next: NextFunction) {
@@ -193,9 +205,20 @@ export const userController = {
     const userByGoogleId = await userService.getOneByGoogleId(sub);
 
     if (userByGoogleId) {
-      const token = jwtService.sign({ userId: userByGoogleId.id });
+      const token = jwtService.sign({ userId: userByGoogleId.id, tokenVersion: userByGoogleId.tokenVersion });
 
-      res.status(200).send({ token });
+      const metadata = {
+        ...(req.headers['user-agent'] && {
+          userAgent: req.headers['user-agent'],
+        }),
+        ...(req.ip && {
+          ipAddress: req.ip,
+        }),
+      };
+
+      const refreshToken = await refreshTokenService.create(userByGoogleId.id, metadata);
+
+      res.status(200).send({ accessToken: token, refreshToken });
     } else {
       const userByEmail = await userService.getOneByEmail(email);
 
@@ -203,16 +226,38 @@ export const userController = {
         // Auto-linking Google account by verified email — Google's email_verified already proves ownership, so this is safe
         await userService.linkGoogleId(userByEmail.id, sub);
 
-        const token = jwtService.sign({ userId: userByEmail.id });
+        const token = jwtService.sign({ userId: userByEmail.id, tokenVersion: userByEmail.tokenVersion });
 
-        res.status(200).send({ token });
+        const metadata = {
+          ...(req.headers['user-agent'] && {
+            userAgent: req.headers['user-agent'],
+          }),
+          ...(req.ip && {
+            ipAddress: req.ip,
+          }),
+        };
+
+        const refreshToken = await refreshTokenService.create(userByEmail.id, metadata);
+
+        res.status(200).send({ accessToken: token, refreshToken });
       } else {
         const userData = { name, email, googleId: sub };
         const createdUser = await userService.createFromGoogle(userData);
 
-        const token = jwtService.sign({ userId: createdUser.id });
+        const token = jwtService.sign({ userId: createdUser.id, tokenVersion: createdUser.tokenVersion });
 
-        res.status(200).send({ token });
+        const metadata = {
+          ...(req.headers['user-agent'] && {
+            userAgent: req.headers['user-agent'],
+          }),
+          ...(req.ip && {
+            ipAddress: req.ip,
+          }),
+        };
+
+        const refreshToken = await refreshTokenService.create(createdUser.id, metadata);
+
+        res.status(200).send({ accessToken: token, refreshToken });
       }
     }
   },

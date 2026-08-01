@@ -37,6 +37,7 @@ function makeUser(overrides: Partial<User> = {}): User {
     password: null,
     confirmedEmail: false,
     googleId: null,
+    tokenVersion: 0,
     createdAt: new Date(),
     updatedAt: new Date(),
     ...overrides,
