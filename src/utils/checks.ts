@@ -264,7 +264,21 @@ export async function assertIsValidToken(rawToken: string, type: TokenTypes) {
   return token;
 }
 
-export async function assertIsValidRefreshToken(rawToken: string) {
+export function assertHasRefreshTokenCookie(
+  rawToken: string | undefined,
+): string {
+  if (!rawToken) {
+    throw new UnauthorizedError('Refresh token is missing');
+  }
+
+  return rawToken;
+}
+
+export async function assertIsValidRefreshToken(rawToken: string | undefined) {
+  if (!rawToken) {
+    throw new UnauthorizedError('Refresh token is missing');
+  }
+
   const token = await refreshTokenService.verifyAndRotate(rawToken);
 
   if (token === 'reused') {
@@ -283,12 +297,6 @@ export async function assertIsValidRefreshToken(rawToken: string) {
 }
 
 export async function assertIsValidGoogleToken(googleToken: string) {
-  // googleService.verify rejects (rather than resolving to null) for an
-  // invalid, expired, or wrong-audience Google id_token — verifyIdToken
-  // throws on those cases instead of returning a falsy payload. Without
-  // this catch, that rejection would bubble past this assertion straight
-  // to the error middleware as an unhandled 500, instead of the expected
-  // 401 for what is really just an authentication failure.
   let token;
   try {
     token = await googleService.verify(googleToken);
@@ -303,10 +311,6 @@ export async function assertIsValidGoogleToken(googleToken: string) {
   return token;
 }
 
-// Accepts an optional transaction client so the caller can run this check
-// in the same transaction as the actual deletion. Without that, a room
-// could be created by the user between the check and the delete
-// (TOCTOU), since the two operations wouldn't be atomic.
 export async function assertHasNoOwnedRooms(userId: string, tx: Tx = prisma) {
   const hasOwnedRoom = await roomService.hasOwnedRoom(userId, tx);
   if (hasOwnedRoom) {

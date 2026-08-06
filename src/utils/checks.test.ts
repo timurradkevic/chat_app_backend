@@ -11,6 +11,8 @@ import {
   assertIsValidToken,
   assertIsConfirmedEmail,
   assertIsValidGoogleToken,
+  assertIsValidRefreshToken,
+  assertHasRefreshTokenCookie,
   ForbiddenError,
   ConflictError,
   UnauthorizedError,
@@ -21,8 +23,15 @@ import { roomService } from '../services/room.service.js';
 import { userService } from '../services/user.service.js';
 import { tokenService } from '../services/token.service.js';
 import { googleService } from './google.js';
+import { refreshTokenService } from '../services/refreshToken.service.js';
 import { Role } from '../generated/prisma/enums.js';
 import type { Token, User } from '../generated/prisma/client.js';
+
+vi.mock('../services/refreshToken.service.js', () => ({
+  refreshTokenService: {
+    verifyAndRotate: vi.fn(),
+  },
+}));
 
 vi.mock('../services/room.service.js', () => ({
   roomService: {
@@ -386,6 +395,79 @@ describe('auth-related checks', () => {
       >;
 
       expect(getAuthUser(req)).toBe(user);
+    });
+  });
+
+  describe('assertIsValidRefreshToken', () => {
+    it('throws UnauthorizedError without touching the DB when the token is undefined (no cookie sent)', async () => {
+      await expect(assertIsValidRefreshToken(undefined)).rejects.toThrow(
+        UnauthorizedError,
+      );
+      expect(refreshTokenService.verifyAndRotate).not.toHaveBeenCalled();
+    });
+
+    it('throws UnauthorizedError without touching the DB when the token is an empty string', async () => {
+      await expect(assertIsValidRefreshToken('')).rejects.toThrow(
+        UnauthorizedError,
+      );
+      expect(refreshTokenService.verifyAndRotate).not.toHaveBeenCalled();
+    });
+
+    it('returns the rotation result on a valid token', async () => {
+      const rotated = {
+        rawToken: 'new-raw-token',
+        userId: 'user-1',
+        familyId: 'family-1',
+      };
+      vi.mocked(refreshTokenService.verifyAndRotate).mockResolvedValue(rotated);
+
+      await expect(assertIsValidRefreshToken('old-raw-token')).resolves.toEqual(
+        rotated,
+      );
+    });
+
+    it('throws UnauthorizedError when the token was reused', async () => {
+      vi.mocked(refreshTokenService.verifyAndRotate).mockResolvedValue(
+        'reused',
+      );
+
+      await expect(assertIsValidRefreshToken('reused-token')).rejects.toThrow(
+        UnauthorizedError,
+      );
+    });
+
+    it('throws GoneError when the token has expired', async () => {
+      vi.mocked(refreshTokenService.verifyAndRotate).mockResolvedValue(
+        'expired',
+      );
+
+      await expect(assertIsValidRefreshToken('expired-token')).rejects.toThrow(
+        GoneError,
+      );
+    });
+
+    it('throws UnauthorizedError when the token is unknown', async () => {
+      vi.mocked(refreshTokenService.verifyAndRotate).mockResolvedValue(null);
+
+      await expect(assertIsValidRefreshToken('unknown-token')).rejects.toThrow(
+        UnauthorizedError,
+      );
+    });
+  });
+
+  describe('assertHasRefreshTokenCookie', () => {
+    it('returns the raw token unchanged when present', () => {
+      expect(assertHasRefreshTokenCookie('raw-token')).toBe('raw-token');
+    });
+
+    it('throws UnauthorizedError when the cookie is undefined', () => {
+      expect(() => assertHasRefreshTokenCookie(undefined)).toThrow(
+        UnauthorizedError,
+      );
+    });
+
+    it('throws UnauthorizedError when the cookie is an empty string', () => {
+      expect(() => assertHasRefreshTokenCookie('')).toThrow(UnauthorizedError);
     });
   });
 });
