@@ -52,6 +52,19 @@ export class GoneError extends Error {
   }
 }
 
+export class HasOwnedRoomsError extends Error {
+  rooms: Awaited<ReturnType<typeof roomService.hasOwnedRoom>>['rooms'];
+
+  constructor(
+    message = 'User still owns one or more rooms, transfer ownership first',
+    rooms: Awaited<ReturnType<typeof roomService.hasOwnedRoom>>['rooms'],
+  ) {
+    super(message);
+    this.name = 'HasOwnedRoomsError';
+    this.rooms = rooms;
+  }
+}
+
 /**
  * Requires an authenticated user. Throws UnauthorizedError if req.user is not set.
  * For endpoints where auth is optional, do NOT use this — check req.user directly
@@ -312,10 +325,11 @@ export async function assertIsValidGoogleToken(googleToken: string) {
 }
 
 export async function assertHasNoOwnedRooms(userId: string, tx: Tx = prisma) {
-  const hasOwnedRoom = await roomService.hasOwnedRoom(userId, tx);
-  if (hasOwnedRoom) {
-    throw new ConflictError(
+  const { hasOwnedRooms, rooms } = await roomService.hasOwnedRoom(userId, tx);
+  if (hasOwnedRooms) {
+    throw new HasOwnedRoomsError(
       'User still owns one or more rooms, transfer ownership first',
+      rooms,
     );
   }
 }

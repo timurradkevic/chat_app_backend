@@ -151,16 +151,51 @@ describe('roomService', () => {
   });
 
   describe('hasOwnedRoom', () => {
-    it('returns true when the user owns at least one room', async () => {
-      vi.mocked(prisma.room.findFirst).mockResolvedValue(makeRoom());
+    it('returns true and the list of owned rooms (id, name only) when the user owns at least one room', async () => {
+      const ownedRooms = [{ id: 'room-1', name: 'Room' }];
+      vi.mocked(prisma.room.findMany).mockResolvedValue(
+        ownedRooms as unknown as Room[],
+      );
 
-      expect(await roomService.hasOwnedRoom('user-1')).toBe(true);
+      expect(await roomService.hasOwnedRoom('user-1')).toEqual({
+        hasOwnedRooms: true,
+        rooms: ownedRooms,
+      });
     });
 
-    it('returns false when the user owns no rooms', async () => {
-      vi.mocked(prisma.room.findFirst).mockResolvedValue(null);
+    it('returns false and an empty list when the user owns no rooms', async () => {
+      vi.mocked(prisma.room.findMany).mockResolvedValue([]);
 
-      expect(await roomService.hasOwnedRoom('user-1')).toBe(false);
+      expect(await roomService.hasOwnedRoom('user-1')).toEqual({
+        hasOwnedRooms: false,
+        rooms: [],
+      });
+    });
+
+    it('requests only id and name from Prisma, not the full room record', async () => {
+      vi.mocked(prisma.room.findMany).mockResolvedValue([]);
+
+      await roomService.hasOwnedRoom('user-1');
+
+      expect(prisma.room.findMany).toHaveBeenCalledWith({
+        where: { ownerId: 'user-1' },
+        select: { id: true, name: true },
+      });
+    });
+
+    it('uses the passed transaction client instead of the default prisma client when provided', async () => {
+      const txFindMany = vi.fn().mockResolvedValue([]);
+      const tx = { room: { findMany: txFindMany } } as unknown as Parameters<
+        typeof roomService.hasOwnedRoom
+      >[1];
+
+      await roomService.hasOwnedRoom('user-1', tx);
+
+      expect(txFindMany).toHaveBeenCalledWith({
+        where: { ownerId: 'user-1' },
+        select: { id: true, name: true },
+      });
+      expect(prisma.room.findMany).not.toHaveBeenCalled();
     });
   });
 

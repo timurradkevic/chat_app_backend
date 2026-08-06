@@ -9,6 +9,7 @@ import {
   UnauthorizedError,
   ConflictError,
   GoneError,
+  HasOwnedRoomsError,
 } from './checks.js';
 
 export const catchError =
@@ -54,6 +55,19 @@ export const catchError =
       }
       if (err instanceof GoneError) {
         (res as Response).status(410).json({ message: err.message });
+        return;
+      }
+      // NOTE: HasOwnedRoomsError also maps to 409, same as ConflictError above —
+      // but it's a distinct class with its own payload shape ({message, rooms}
+      // vs {message}). Keep this as a separate branch: don't fold it into the
+      // ConflictError check (e.g. via `err instanceof ConflictError`) even if
+      // someone later makes HasOwnedRoomsError extend ConflictError — that
+      // would silently drop the `rooms` field from the response.
+      if (err instanceof HasOwnedRoomsError) {
+        (res as Response).status(409).json({
+          message: err.message,
+          rooms: err.rooms,
+        });
         return;
       }
       next(err);

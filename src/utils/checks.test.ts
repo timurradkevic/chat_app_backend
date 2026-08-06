@@ -17,6 +17,7 @@ import {
   ConflictError,
   UnauthorizedError,
   GoneError,
+  HasOwnedRoomsError,
   getAuthUser,
 } from './checks.js';
 import { roomService } from '../services/room.service.js';
@@ -211,16 +212,56 @@ describe('room role checks', () => {
   });
 
   describe('assertHasNoOwnedRooms (blocks account deletion while owning rooms)', () => {
-    it('throws ConflictError when the user still owns rooms', async () => {
-      vi.mocked(roomService.hasOwnedRoom).mockResolvedValue(true);
+    it('throws HasOwnedRoomsError carrying the list of owned rooms when the user still owns rooms', async () => {
+      const rooms = [{ id: 'room-1', name: 'Room A' }];
+      vi.mocked(roomService.hasOwnedRoom).mockResolvedValue({
+        hasOwnedRooms: true,
+        rooms,
+      });
+
       await expect(assertHasNoOwnedRooms('user-1')).rejects.toBeInstanceOf(
-        ConflictError,
+        HasOwnedRoomsError,
       );
     });
 
+    it('attaches the owned rooms to the thrown error', async () => {
+      const rooms = [
+        { id: 'room-1', name: 'Room A' },
+        { id: 'room-2', name: 'Room B' },
+      ];
+      vi.mocked(roomService.hasOwnedRoom).mockResolvedValue({
+        hasOwnedRooms: true,
+        rooms,
+      });
+
+      try {
+        await assertHasNoOwnedRooms('user-1');
+        expect.unreachable('expected assertHasNoOwnedRooms to throw');
+      } catch (err) {
+        expect(err).toBeInstanceOf(HasOwnedRoomsError);
+        expect((err as HasOwnedRoomsError).rooms).toEqual(rooms);
+      }
+    });
+
     it('passes when the user owns no rooms', async () => {
-      vi.mocked(roomService.hasOwnedRoom).mockResolvedValue(false);
+      vi.mocked(roomService.hasOwnedRoom).mockResolvedValue({
+        hasOwnedRooms: false,
+        rooms: [],
+      });
+
       await expect(assertHasNoOwnedRooms('user-1')).resolves.toBeUndefined();
+    });
+
+    it('forwards the passed transaction client through to roomService.hasOwnedRoom', async () => {
+      vi.mocked(roomService.hasOwnedRoom).mockResolvedValue({
+        hasOwnedRooms: false,
+        rooms: [],
+      });
+      const tx = {} as Parameters<typeof assertHasNoOwnedRooms>[1];
+
+      await assertHasNoOwnedRooms('user-1', tx);
+
+      expect(roomService.hasOwnedRoom).toHaveBeenCalledWith('user-1', tx);
     });
   });
 });

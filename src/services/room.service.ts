@@ -119,9 +119,12 @@ export const roomService = {
   },
 
   async hasOwnedRoom(userId: string, tx: Tx = prisma) {
-    const rooms = await tx.room.findFirst({ where: { ownerId: userId } });
+    const rooms = await tx.room.findMany({
+      where: { ownerId: userId },
+      select: { id: true, name: true },
+    });
 
-    return !!rooms;
+    return { hasOwnedRooms: rooms.length > 0, rooms };
   },
 
   async create(roomData: RoomData) {
