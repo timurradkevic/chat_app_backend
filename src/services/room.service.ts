@@ -14,12 +14,30 @@ export const roomService = {
         orderBy: [{ lastActivityAt: 'desc' }, { id: 'desc' }],
         skip,
         take: limit,
+        select: {
+          id: true,
+          name: true,
+          ownerId: true,
+          lastActivityAt: true,
+          createdAt: true,
+          updatedAt: true,
+          _count: {
+            select: { members: true },
+          },
+        },
       }),
       prisma.room.count(),
     ]);
 
     return {
-      data: rooms,
+      data: rooms.map((room) => {
+        const { _count, ...rest } = room;
+
+        return {
+          ...rest,
+          memberCount: _count.members,
+        };
+      }),
       page,
       limit,
       total,
@@ -44,6 +62,17 @@ export const roomService = {
         },
         skip: 1,
       }),
+      select: {
+        id: true,
+        name: true,
+        ownerId: true,
+        lastActivityAt: true,
+        createdAt: true,
+        updatedAt: true,
+        _count: {
+          select: { members: true },
+        },
+      },
     });
 
     const hasMore = rooms.length > limit;
@@ -53,7 +82,14 @@ export const roomService = {
     }
 
     return {
-      data: rooms,
+      data: rooms.map((room) => {
+        const { _count, ...rest } = room;
+
+        return {
+          ...rest,
+          memberCount: _count.members,
+        };
+      }),
       hasMore,
       nextCursor: hasMore ? rooms?.[rooms.length - 1]?.id : null,
     };

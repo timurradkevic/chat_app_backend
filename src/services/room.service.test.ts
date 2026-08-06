@@ -10,6 +10,8 @@ vi.mock('../lib/prisma.js', () => ({
       create: vi.fn(),
       findFirst: vi.fn(),
       findUnique: vi.fn(),
+      findMany: vi.fn(),
+      count: vi.fn(),
     },
     roomMember: {
       create: vi.fn(),
@@ -38,6 +40,14 @@ function makeRoom(overrides: Partial<Room> = {}): Room {
   };
 }
 
+// Mimics what Prisma actually returns for `select: { ..., _count: { select: { members: true } } }`
+function makeRoomWithCount(overrides: Partial<Room> = {}, membersCount = 3) {
+  return {
+    ...makeRoom(overrides),
+    _count: { members: membersCount },
+  };
+}
+
 function makeRoomMember(overrides: Partial<RoomMember> = {}): RoomMember {
   return {
     id: 'member-1',
@@ -52,6 +62,76 @@ function makeRoomMember(overrides: Partial<RoomMember> = {}): RoomMember {
 describe('roomService', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  describe('getAll', () => {
+    it('maps _count.members to memberCount and strips the raw _count field', async () => {
+      const roomsFromDb = [
+        makeRoomWithCount({ id: 'room-1' }, 5),
+        makeRoomWithCount({ id: 'room-2' }, 0),
+      ];
+      vi.mocked(prisma.room.findMany).mockResolvedValue(
+        roomsFromDb as unknown as Room[],
+      );
+      vi.mocked(prisma.room.count).mockResolvedValue(2);
+
+      const result = await roomService.getAll(1, 20);
+
+      expect(result.data).toEqual([
+        expect.objectContaining({ id: 'room-1', memberCount: 5 }),
+        expect.objectContaining({ id: 'room-2', memberCount: 0 }),
+      ]);
+      result.data.forEach((room) => {
+        expect(room).not.toHaveProperty('_count');
+      });
+    });
+
+    it('requests the member count from Prisma via _count.select.members', async () => {
+      vi.mocked(prisma.room.findMany).mockResolvedValue([]);
+      vi.mocked(prisma.room.count).mockResolvedValue(0);
+
+      await roomService.getAll(1, 20);
+
+      expect(prisma.room.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          select: expect.objectContaining({
+            _count: { select: { members: true } },
+          }),
+        }),
+      );
+    });
+  });
+
+  describe('getAllByUserId', () => {
+    it('maps _count.members to memberCount and strips the raw _count field', async () => {
+      const roomsFromDb = [makeRoomWithCount({ id: 'room-1' }, 7)];
+      vi.mocked(prisma.room.findMany).mockResolvedValue(
+        roomsFromDb as unknown as Room[],
+      );
+
+      const result = await roomService.getAllByUserId('user-1');
+
+      expect(result.data).toEqual([
+        expect.objectContaining({ id: 'room-1', memberCount: 7 }),
+      ]);
+      result.data.forEach((room) => {
+        expect(room).not.toHaveProperty('_count');
+      });
+    });
+
+    it('requests the member count from Prisma via _count.select.members', async () => {
+      vi.mocked(prisma.room.findMany).mockResolvedValue([]);
+
+      await roomService.getAllByUserId('user-1');
+
+      expect(prisma.room.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          select: expect.objectContaining({
+            _count: { select: { members: true } },
+          }),
+        }),
+      );
+    });
   });
 
   describe('checkIsUserIn', () => {
