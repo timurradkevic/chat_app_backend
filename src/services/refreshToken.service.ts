@@ -5,6 +5,7 @@ import { redis } from '../lib/redis.js';
 
 const REUSE_GRACE_PERIOD_MS = 10 * 1000; // 10 seconds
 const REUSE_GRACE_PERIOD_SECONDS = Math.ceil(REUSE_GRACE_PERIOD_MS / 1000);
+export const REFRESH_TOKEN_EXPIRATION_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 
 /**
  * Redis key used to cache the result of a rotation for the grace-period
@@ -34,7 +35,7 @@ export const refreshTokenService = {
     meta?: { ipAddress?: string; userAgent?: string },
     familyId?: string,
   ) {
-    const expiredTime = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 days
+    const expiredTime = new Date(Date.now() + REFRESH_TOKEN_EXPIRATION_MS);
     const rawToken = randomBytes(32).toString('hex');
     const tokenHash = createHash('sha256').update(rawToken).digest('hex');
     const finalFamilyId = familyId ?? randomBytes(16).toString('hex');
@@ -99,7 +100,7 @@ export const refreshTokenService = {
       const newTokenHash = createHash('sha256')
         .update(newRawToken)
         .digest('hex');
-      const newExpiredTime = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 days
+      const newExpiredTime = new Date(Date.now() + REFRESH_TOKEN_EXPIRATION_MS);
 
       await prisma.refreshToken.create({
         data: {

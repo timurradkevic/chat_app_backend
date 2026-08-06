@@ -698,7 +698,7 @@ describe('roomController', () => {
   describe('getAll', () => {
     it('returns every room in the system with default pagination', async () => {
       const result = {
-        data: [makeRoom()],
+        data: [{ ...makeRoom(), memberCount: 4, _count: { members: 4 } }],
         page: 1,
         limit: 20,
         total: 1,
@@ -745,7 +745,11 @@ describe('roomController', () => {
 
   describe('getAllByUserId ("mine")', () => {
     it("returns only the requester's rooms", async () => {
-      const result = { data: [makeRoom()], hasMore: false, nextCursor: null };
+      const result = {
+        data: [{ ...makeRoom(), memberCount: 4, _count: { members: 4 } }],
+        hasMore: false,
+        nextCursor: null,
+      };
       vi.mocked(roomService.getAllByUserId).mockResolvedValue(result);
 
       const req = makeReq<

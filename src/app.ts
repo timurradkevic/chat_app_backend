@@ -13,6 +13,7 @@ import { pinoHttp } from 'pino-http';
 import { logger } from './lib/logger.js';
 import { redis } from './lib/redis.js';
 import { CORS_ORIGIN } from './lib/socket.js';
+import cookieParser from 'cookie-parser';
 
 const PORT = process.env.PORT || 3000;
 const app = express();
@@ -25,8 +26,10 @@ if (process.env.TRUST_PROXY === 'true') {
 
 app.use(helmet());
 app.use(express.json({ limit: '100kb' }));
+app.use(cookieParser());
 app.use(
   cors({
+    credentials: true,
     origin: CORS_ORIGIN,
     methods: ['GET', 'POST', 'PATCH', 'DELETE', 'PUT'],
     allowedHeaders: ['Content-Type', 'Authorization'],

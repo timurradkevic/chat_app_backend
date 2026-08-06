@@ -13,6 +13,7 @@ import {
   assertIsCorrectEmailAndPassword,
   assertIsConfirmedEmail,
   assertIsValidRefreshToken,
+  assertHasRefreshTokenCookie,
   assertIsUser,
   assertIsValidToken,
   assertIsValidGoogleToken,
@@ -21,6 +22,10 @@ import {
   assertIsUniqueEmail,
   assertHasNoOwnedRooms,
 } from '../utils/checks.js';
+import {
+  setRefreshTokenCookie,
+  clearRefreshTokenCookie,
+} from '../lib/cookies.js';
 import type { User } from '../generated/prisma/client.js';
 
 // --- Mocks for the services/helpers the controller talks to ---
@@ -33,6 +38,11 @@ vi.mock('../services/refreshToken.service.js', () => ({
     revokeAllForUser: vi.fn(),
     listSessions: vi.fn(),
   },
+}));
+
+vi.mock('../lib/cookies.js', () => ({
+  setRefreshTokenCookie: vi.fn(),
+  clearRefreshTokenCookie: vi.fn(),
 }));
 
 vi.mock('../utils/jwt.js', () => ({
@@ -63,6 +73,7 @@ vi.mock('../utils/checks.js', () => ({
   assertIsCorrectEmailAndPassword: vi.fn(),
   assertIsConfirmedEmail: vi.fn(),
   assertIsValidRefreshToken: vi.fn(),
+  assertHasRefreshTokenCookie: vi.fn(),
   assertIsUser: vi.fn(),
   assertIsValidToken: vi.fn(),
   assertIsValidGoogleToken: vi.fn(),
@@ -126,6 +137,7 @@ function makeReq<T = Request>(overrides: Record<string, unknown> = {}): T {
   return {
     body: {},
     headers: {},
+    cookies: {},
     ...overrides,
   } as unknown as T;
 }
@@ -144,6 +156,16 @@ describe('userController', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     next = vi.fn();
+
+    // Default: behave like the real assertHasRefreshTokenCookie (pass the
+    // raw cookie value through, throw if missing). Individual tests can
+    // still override this with vi.mocked(...).mockImplementation(...).
+    vi.mocked(assertHasRefreshTokenCookie).mockImplementation((raw) => {
+      if (!raw) {
+        throw new Error('Refresh token is missing');
+      }
+      return raw;
+    });
   });
 
   describe('register', () => {
@@ -182,6 +204,7 @@ describe('userController', () => {
       expect(res.status).toHaveBeenCalledWith(201);
       const sent = vi.mocked(res.send).mock.calls[0]?.[0];
       expect(sent).not.toHaveProperty('password');
+      expect(sent).toHaveProperty('hasPassword', true);
     });
 
     // Regression test: without normalizing the email, "User@Example.com" and
@@ -234,7 +257,26 @@ describe('userController', () => {
       expect(res.status).toHaveBeenCalledWith(200);
       const sent = vi.mocked(res.send).mock.calls[0]?.[0];
       expect(sent).not.toHaveProperty('password');
-      expect(sent).toMatchObject({ id: 'user-1', email: user.email });
+      expect(sent).toMatchObject({
+        id: 'user-1',
+        email: user.email,
+        hasPassword: true,
+      });
+    });
+
+    it('reports hasPassword: false for a Google-only account with no password set', async () => {
+      const user = makeUser({
+        id: 'user-2',
+        password: null,
+        googleId: 'google-sub-1',
+      });
+      const req = makeReq({ user: { ...user, sessionId: 'session-1' } });
+      const res = makeRes();
+
+      await userController.getMe(req, res, next);
+
+      const sent = vi.mocked(res.send).mock.calls[0]?.[0];
+      expect(sent).toMatchObject({ hasPassword: false });
     });
   });
 
@@ -264,6 +306,9 @@ describe('userController', () => {
       });
       expect(mailer.sendActivationEmail).not.toHaveBeenCalled();
       expect(res.status).toHaveBeenCalledWith(200);
+      const sent = vi.mocked(res.send).mock.calls[0]?.[0];
+      expect(sent).not.toHaveProperty('password');
+      expect(sent).toMatchObject({ hasPassword: true });
     });
 
     it('reissues the activation token and sends it when the email changes', async () => {
@@ -298,6 +343,9 @@ describe('userController', () => {
         'new@example.com',
         'raw-activation-token',
       );
+      const sent = vi.mocked(res.send).mock.calls[0]?.[0];
+      expect(sent).not.toHaveProperty('password');
+      expect(sent).toMatchObject({ hasPassword: true });
     });
 
     // Regression test: comparing the raw (non-normalized) input against
@@ -328,6 +376,9 @@ describe('userController', () => {
         email: 'same@example.com',
       });
       expect(mailer.sendActivationEmail).not.toHaveBeenCalled();
+      const sent = vi.mocked(res.send).mock.calls[0]?.[0];
+      expect(sent).not.toHaveProperty('password');
+      expect(sent).toMatchObject({ hasPassword: true });
     });
   });
 
@@ -444,7 +495,7 @@ describe('userController', () => {
   });
 
   describe('login', () => {
-    it('returns an accessToken and refreshToken on successful login', async () => {
+    it('sets the refresh token as an httpOnly cookie and returns only the accessToken in the body', async () => {
       const user = makeUser({ id: 'user-1', tokenVersion: 2 });
       vi.mocked(assertIsCorrectEmailAndPassword).mockResolvedValue(user);
       vi.mocked(assertIsConfirmedEmail).mockReturnValue(undefined);
@@ -473,11 +524,18 @@ describe('userController', () => {
         tokenVersion: 2,
         sessionId: 'family-1',
       });
+      expect(setRefreshTokenCookie).toHaveBeenCalledWith(
+        res,
+        'raw-refresh-token',
+      );
       expect(res.status).toHaveBeenCalledWith(200);
+      // The whole point of this commit: refreshToken must NOT be in the body.
       expect(res.send).toHaveBeenCalledWith({
         accessToken: 'signed-access-token',
-        refreshToken: 'raw-refresh-token',
       });
+      expect(res.send).not.toHaveBeenCalledWith(
+        expect.objectContaining({ refreshToken: expect.anything() }),
+      );
     });
 
     // Regression test: without normalizing the email here, a login attempt
@@ -688,10 +746,13 @@ describe('userController', () => {
       expect(userService.linkGoogleIdWithConfirmedEmail).not.toHaveBeenCalled();
 
       expect(refreshTokenService.create).toHaveBeenCalledWith('user-1', {});
+      expect(setRefreshTokenCookie).toHaveBeenCalledWith(
+        res,
+        'raw-refresh-token',
+      );
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.send).toHaveBeenCalledWith({
         accessToken: 'signed-access-token',
-        refreshToken: 'raw-refresh-token',
       });
     });
 
@@ -835,9 +896,9 @@ describe('userController', () => {
   });
 
   describe('refresh', () => {
-    it('returns a new accessToken alongside the rotated refreshToken', async () => {
+    it('reads the refresh token from the cookie and issues a new accessToken', async () => {
       vi.mocked(assertIsValidRefreshToken).mockResolvedValue({
-        rawToken: 'new-raw-token',
+        rawToken: 'rotated-raw-token',
         userId: 'user-1',
         familyId: 'family-1',
       });
@@ -845,54 +906,101 @@ describe('userController', () => {
       vi.mocked(assertIsUser).mockResolvedValue(user);
       vi.mocked(jwtService.sign).mockReturnValue('new-access-token');
 
-      const req = makeReq({
-        body: { refreshTokenData: { refreshToken: 'old-raw-token' } },
-      });
+      const req = makeReq({ cookies: { refreshToken: 'old-raw-token' } });
       const res = makeRes();
 
       await userController.refresh(req, res, next);
 
+      expect(assertHasRefreshTokenCookie).toHaveBeenCalledWith('old-raw-token');
       expect(assertIsValidRefreshToken).toHaveBeenCalledWith('old-raw-token');
       expect(assertIsUser).toHaveBeenCalledWith('user-1');
       expect(jwtService.sign).toHaveBeenCalledWith({
         userId: 'user-1',
         tokenVersion: 5,
+        // sessionId must stay the family that assertIsValidRefreshToken
+        // (verifyAndRotate) already rotated within — NOT a new one.
         sessionId: 'family-1',
       });
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.send).toHaveBeenCalledWith({
         accessToken: 'new-access-token',
-        refreshToken: 'new-raw-token',
       });
+    });
+
+    it('sets the cookie to the rotated raw token returned by assertIsValidRefreshToken, not a freshly-created one', async () => {
+      vi.mocked(assertIsValidRefreshToken).mockResolvedValue({
+        rawToken: 'rotated-raw-token',
+        userId: 'user-1',
+        familyId: 'family-1',
+      });
+      vi.mocked(assertIsUser).mockResolvedValue(
+        makeUser({ id: 'user-1', tokenVersion: 0 }),
+      );
+      vi.mocked(jwtService.sign).mockReturnValue('new-access-token');
+
+      const req = makeReq({ cookies: { refreshToken: 'old-raw-token' } });
+      const res = makeRes();
+
+      await userController.refresh(req, res, next);
+
+      // Regression guard for the "refresh mints a duplicate, disconnected
+      // session" bug: refresh() must never call refreshTokenService.create
+      // — the rotated session from verifyAndRotate is the one and only
+      // session that should be issued.
+      expect(refreshTokenService.create).not.toHaveBeenCalled();
+      expect(setRefreshTokenCookie).toHaveBeenCalledWith(
+        res,
+        'rotated-raw-token',
+      );
+      expect(setRefreshTokenCookie).toHaveBeenCalledTimes(1);
+    });
+
+    it('rejects with UnauthorizedError and never rotates when the refresh cookie is missing', async () => {
+      vi.mocked(assertHasRefreshTokenCookie).mockImplementation(() => {
+        throw new Error('Refresh token is missing');
+      });
+
+      const req = makeReq({ cookies: {} });
+      const res = makeRes();
+
+      await expect(userController.refresh(req, res, next)).rejects.toThrow(
+        'Refresh token is missing',
+      );
+
+      expect(assertIsValidRefreshToken).not.toHaveBeenCalled();
+      expect(setRefreshTokenCookie).not.toHaveBeenCalled();
+      expect(res.status).not.toHaveBeenCalled();
     });
   });
 
   describe('logout', () => {
-    it('revokes the refresh token when a matching token record is found', async () => {
+    it('revokes the refresh token when a matching token record is found and clears the cookie', async () => {
       vi.mocked(refreshTokenService.findByRawToken).mockResolvedValue({
         id: 'token-1',
       } as never);
 
-      const req = makeReq({
-        body: { logoutData: { refreshToken: 'raw-token' } },
-      });
+      const req = makeReq({ cookies: { refreshToken: 'raw-token' } });
       const res = makeRes();
 
       await userController.logout(req, res, next);
 
+      expect(assertHasRefreshTokenCookie).toHaveBeenCalledWith('raw-token');
+      // logout must NOT go through assertIsValidRefreshToken: that would
+      // trigger a full verify+rotate cycle (DB write + Redis cache) for
+      // what should be a cheap lookup-and-delete.
+      expect(assertIsValidRefreshToken).not.toHaveBeenCalled();
       expect(refreshTokenService.findByRawToken).toHaveBeenCalledWith(
         'raw-token',
       );
       expect(refreshTokenService.revoke).toHaveBeenCalledWith('token-1');
+      expect(clearRefreshTokenCookie).toHaveBeenCalledWith(res);
       expect(res.sendStatus).toHaveBeenCalledWith(204);
     });
 
-    it('does not call revoke when no matching token record is found', async () => {
+    it('still clears the cookie when no matching token record is found (already used/expired/unknown)', async () => {
       vi.mocked(refreshTokenService.findByRawToken).mockResolvedValue(null);
 
-      const req = makeReq({
-        body: { logoutData: { refreshToken: 'unknown-token' } },
-      });
+      const req = makeReq({ cookies: { refreshToken: 'unknown-token' } });
       const res = makeRes();
 
       await userController.logout(req, res, next);
@@ -901,7 +1009,25 @@ describe('userController', () => {
         'unknown-token',
       );
       expect(refreshTokenService.revoke).not.toHaveBeenCalled();
+      expect(clearRefreshTokenCookie).toHaveBeenCalledWith(res);
       expect(res.sendStatus).toHaveBeenCalledWith(204);
+    });
+
+    it('rejects with UnauthorizedError and never touches the DB when the refresh cookie is missing', async () => {
+      vi.mocked(assertHasRefreshTokenCookie).mockImplementation(() => {
+        throw new Error('Refresh token is missing');
+      });
+
+      const req = makeReq({ cookies: {} });
+      const res = makeRes();
+
+      await expect(userController.logout(req, res, next)).rejects.toThrow(
+        'Refresh token is missing',
+      );
+
+      expect(refreshTokenService.findByRawToken).not.toHaveBeenCalled();
+      expect(clearRefreshTokenCookie).not.toHaveBeenCalled();
+      expect(res.sendStatus).not.toHaveBeenCalled();
     });
   });
 

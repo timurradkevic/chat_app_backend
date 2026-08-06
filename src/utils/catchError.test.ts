@@ -9,6 +9,7 @@ import {
   UnauthorizedError,
   ConflictError,
   GoneError,
+  HasOwnedRoomsError,
 } from './checks.js';
 
 function makeReq(): Request {
@@ -187,6 +188,28 @@ describe('catchError', () => {
     );
 
     expect(res.status).not.toHaveBeenCalled();
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  it('maps a HasOwnedRoomsError to a 409 response carrying the message and the list of owned rooms', async () => {
+    const rooms = [{ id: 'room-1', name: 'Room A' }];
+    const handler = vi.fn(async () => {
+      throw new HasOwnedRoomsError(
+        'User still owns one or more rooms, transfer ownership first',
+        rooms as never,
+      );
+    });
+    const req = makeReq();
+    const res = makeRes();
+
+    catchError(handler)(req, res, next);
+    await flush();
+
+    expect(res.status).toHaveBeenCalledWith(409);
+    expect(res.json).toHaveBeenCalledWith({
+      message: 'User still owns one or more rooms, transfer ownership first',
+      rooms,
+    });
     expect(next).not.toHaveBeenCalled();
   });
 });
