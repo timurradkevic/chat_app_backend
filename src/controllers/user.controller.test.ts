@@ -204,6 +204,7 @@ describe('userController', () => {
       expect(res.status).toHaveBeenCalledWith(201);
       const sent = vi.mocked(res.send).mock.calls[0]?.[0];
       expect(sent).not.toHaveProperty('password');
+      expect(sent).toHaveProperty('hasPassword', true);
     });
 
     // Regression test: without normalizing the email, "User@Example.com" and
@@ -256,7 +257,26 @@ describe('userController', () => {
       expect(res.status).toHaveBeenCalledWith(200);
       const sent = vi.mocked(res.send).mock.calls[0]?.[0];
       expect(sent).not.toHaveProperty('password');
-      expect(sent).toMatchObject({ id: 'user-1', email: user.email });
+      expect(sent).toMatchObject({
+        id: 'user-1',
+        email: user.email,
+        hasPassword: true,
+      });
+    });
+
+    it('reports hasPassword: false for a Google-only account with no password set', async () => {
+      const user = makeUser({
+        id: 'user-2',
+        password: null,
+        googleId: 'google-sub-1',
+      });
+      const req = makeReq({ user: { ...user, sessionId: 'session-1' } });
+      const res = makeRes();
+
+      await userController.getMe(req, res, next);
+
+      const sent = vi.mocked(res.send).mock.calls[0]?.[0];
+      expect(sent).toMatchObject({ hasPassword: false });
     });
   });
 
@@ -286,6 +306,9 @@ describe('userController', () => {
       });
       expect(mailer.sendActivationEmail).not.toHaveBeenCalled();
       expect(res.status).toHaveBeenCalledWith(200);
+      const sent = vi.mocked(res.send).mock.calls[0]?.[0];
+      expect(sent).not.toHaveProperty('password');
+      expect(sent).toMatchObject({ hasPassword: true });
     });
 
     it('reissues the activation token and sends it when the email changes', async () => {
@@ -320,6 +343,9 @@ describe('userController', () => {
         'new@example.com',
         'raw-activation-token',
       );
+      const sent = vi.mocked(res.send).mock.calls[0]?.[0];
+      expect(sent).not.toHaveProperty('password');
+      expect(sent).toMatchObject({ hasPassword: true });
     });
 
     // Regression test: comparing the raw (non-normalized) input against
@@ -350,6 +376,9 @@ describe('userController', () => {
         email: 'same@example.com',
       });
       expect(mailer.sendActivationEmail).not.toHaveBeenCalled();
+      const sent = vi.mocked(res.send).mock.calls[0]?.[0];
+      expect(sent).not.toHaveProperty('password');
+      expect(sent).toMatchObject({ hasPassword: true });
     });
   });
 

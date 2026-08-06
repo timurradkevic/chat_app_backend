@@ -33,7 +33,7 @@ import {
 const stabilizeUser = (user: User) => {
   const { password, ...userWithoutPass } = user;
 
-  return userWithoutPass;
+  return { ...userWithoutPass, hasPassword: password !== null };
 };
 
 type SessionMetadata = {
